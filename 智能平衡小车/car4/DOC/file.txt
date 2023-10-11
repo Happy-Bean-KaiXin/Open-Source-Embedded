@@ -1,0 +1,118 @@
+float speed;
+float aim_speed = 10;
+float angle;
+float aim_angle = 720;
+
+int32_t cnt;
+int32_t last_cnt;  // 上一个时刻的cnt
+float pwm;
+
+void param_Init()
+{
+	cPID.Kp = 7.2;
+	cPID.Ki = 0;
+	cPID.Kd = 2.2;
+	
+	angle_pid.Kp = 0.7;
+	angle_pid.Ki = 0;
+	angle_pid.Kd = 0;
+}
+
+PIDTypedef cPID, lPID;
+PIDTypedef motor_speed_pid;  // 电机速度环
+PIDTypedef angle_pid;
+
+/**
+ * @function: float CurPIDCalc(float NextPoint)
+ * @description: 位置式PID    pwm=Kp*e(k)+Ki*∑e(k)+Kd[e（k）-e(k-1)]
+ * @param {float NextPoint} 目标值
+ * @return {...} 位置式PID pwm
+ */
+static float CurPIDCalc(float NextPoint) {
+	float iError = cPID.SetPoint - NextPoint;        // 给定值与目标值的偏差
+	if((iError >= -1) && (iError <= 1)) iError = 0;  // 设定闭环死区  |e| <  mA,不做调整
+	cPID.SumError += iError;                         // 积分
+	
+	// 积分限幅
+	if( cPID.SumError >=  5200) cPID.SumError = 5200;
+	if( cPID.SumError <= -5200) cPID.SumError =-5200;
+
+	float dError = iError - cPID.LastError; //微分
+
+	cPID.LastError = iError; //更新参数
+	return  (float)( cPID.Kp  *   (float)iError         //比例项 Kp*e(k)
+								 + cPID.Ki  *   (float)cPID.SumError  //积分项 ki*∑e(k)
+								 + cPID.Kd  *   (float)dError);       //微分项 Kd[e（k）-e(k-1)]
+}
+
+/**
+ * @function: float LocPIDCalc(float NextPoint)
+ * @description: 增量式PID  inc= Kp[ e(k)-e(k-1)] +  Ki*e(k) +  Kd*[e(k)-2e(k-1)+e(k-2)]
+ * @param {float NextPoint}  目标值
+ * @return {Increase}  增量式PID pwm
+ */
+static float LocPIDCalc(float NextPoint) {
+	float  iError   = lPID.SetPoint - NextPoint; //偏差
+	float  Increase = lPID.Kp * (iError - lPID.LastError)                         //  Kp[ e(k)-e(k-1)]
+									+ lPID.Ki * (iError)                                          //  Ki*e(k)
+									+ lPID.Kd * (iError - 2.0*lPID.LastError + lPID.PrevError );  //  Kd*[e(k)-2e(k-1)+e(k-2)]
+	lPID.PrevError=lPID.LastError;
+	lPID.LastError=iError;
+  return  Increase;
+}
+
+
+float pid_process(PIDTypedef* pid, float cur, float aim) {
+	pid ->Error = aim - cur;                             // 目标值减去当前值
+	pid ->SumError += pid ->Error;                       // 积分
+	pid ->ChangeError = pid ->Error - pid ->PrevError;  // 微分
+	pid ->PrevError = pid ->Error;
+	
+	return (pid ->Kp * pid ->Error) + (pid ->Ki * pid ->SumError) + (pid ->Kd * pid ->ChangeError);
+}
+
+void set_pwm(int pwm) {
+	if(pwm > 100) {
+		pwm = 100;
+	}
+	if(pwm < -100) {
+		pwm = -100;
+	}
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, pwm >0 ? 1: 0);          // 设置占空比
+//	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, pwm >0 ? 0: 0);
+	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (int)fabs((float)pwm));
+}
+
+void run(void) {
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, 0);
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, 1); 
+}
+
+float limit(float in, float thre) {
+	if(in > thre)
+		return thre;
+	if(in < -1 * thre)
+		return -1 * thre;
+	
+	return in;
+}
+中断程序
+int cnt_ms = 0;
+		
+		cnt = GetMotorPulse(&htim3);
+		// 4倍频  Tl1与Tl2两个脉冲
+		speed = (float)(cnt)/(4.0f * 11)/30 * 1000 ;
+		angle = ((float)cnt)/(2.0f*11)/30 * 360;
+		print(&huart1, "%d,%.2f,10.0\n", cnt, angle);
+		set_pwm((int)pid_process(&cPID, speed, (limit(pid_process(&angle_pid, angle, aim_angle), 5))));
+		
+		if(++cnt_ms >= 10) {
+			cnt_ms = 0;
+			last_cnt = cnt;
+		}
+		
+.h文件声明
+void run(void);
+float pid_process(PIDTypedef* pid, float cur, float aim);
+void set_pwm(int pwm);
+void param_Init();
