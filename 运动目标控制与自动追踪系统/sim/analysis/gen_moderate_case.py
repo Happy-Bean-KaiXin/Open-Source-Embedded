@@ -193,11 +193,13 @@ def main():
     ax.plot(ratios, rule_ideal, c="#2e7d32", lw=1.5, ls="-.",
             label="理想状态-按规则选轴 (纯浮点+仅死区约束)")
 
-    # ratio=1 参考线 —— 标注移到图表顶部空白区，避免被线遮挡
+    # ratio=1 参考线 —— 标注放到图表右上角外部空白区，完全不被线遮挡
     ax.axvline(1.0, color="#444", lw=1.2, ls=":")
-    ax.text(1.02, 0.95, "ratio=1\n(|dx|=|dy|\n交叉/平局点)",
-            va="top", ha="left", fontsize=8.5, color="#444",
-            transform=ax.get_xaxis_transform())
+    ax.text(0.98, 0.98, "ratio=1\n(|dx|=|dy|\n对称/平局点)",
+            va="top", ha="right", fontsize=8.5, color="#444",
+            transform=ax.transAxes,
+            bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="#888", alpha=0.95),
+            zorder=10)
 
     # 标注样本点 —— 标签用箭头指向外部空白区
     label_positions = []  # 收集标签位置避免重叠
@@ -208,14 +210,14 @@ def main():
         other = r["Y"]["end_err"] if r["rec"]=="X" else r["X"]["end_err"]
         ax.scatter([ratio], [err], c="#1565c0", s=40, zorder=5)
         ax.scatter([ratio], [other], c="#ef6c00", s=40, marker="^", zorder=5)
-        # 标注文字放到点的上方/下方空白处（不在数据线上）
+        # 标注文字放到点的上方/下方空白处（白底框+高zorder确保不被线遮挡）
         short = name.split()[0].replace("(","").replace(")","")  # 如 "dx=60,dy=40"
-        offset_y = 8 if err < 10 else -12
+        offset_y = 12 if err < 10 else -14
         ax.annotate(short, (ratio, err),
                     textcoords="offset points", xytext=(0, offset_y),
                     fontsize=7, color="#1565c0", ha="center",
-                    bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="#1565c0", alpha=0.85),
-                    zorder=6)
+                    bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="#1565c0", alpha=0.95),
+                    zorder=10)
 
     ax.set_xscale("log")
     ax.set_xlabel("陡峭度 ratio = |dx| / |dy|   (<1 陡线应选Y , >1 浅线应选X)", fontsize=10)
@@ -238,7 +240,8 @@ def main():
     )
     ax.text(0.98, 0.65, summary, transform=ax.transAxes, ha="right", va="top",
             fontsize=8.5, color="#333",
-            bbox=dict(boxstyle="round,pad=0.4", fc="#e3f2fd", ec="#1565c0"))
+            bbox=dict(boxstyle="round,pad=0.4", fc="#e3f2fd", ec="#1565c0", alpha=0.95),
+            zorder=10)
 
     # ---- 下半部分：详细解释区（独立 axes，带方框边框）----
     ax_exp = fig.add_axes([0.02, 0.003, 0.96, 0.605])

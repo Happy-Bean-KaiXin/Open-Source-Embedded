@@ -19,6 +19,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     if(htim->Instance == TIM4)//10ms
     {
 			if(Flag.Is_Angle_Set) {
+				// [BUGFIX] Servo PID direct-drive guard: always compute PID angle first,
+				//   never write raw target directly to servo compare register.
 				// 使用PID计算角度
 				Flag.Anglex = Position_PID_RealizeX(Flag.X_AXIS, Flag.x_actual);
 				Flag.Angley = Position_PID_RealizeY(Flag.Y_AXIS, Flag.y_actual);
@@ -31,6 +33,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 				Init_CompareY += Servo_Position_PIDY(Init_CompareY, Servo_Position.Servo_TarYout);  // 位置式PID运算 Init_CompareY当前舵机转动的位置
 				angley = Servo_Compare_Angle(Init_CompareY);  // 将PID计算的输出比较值转换为角度值
 				
+				// [BUGFIX] Servo X-axis: must go through PID → angle clamp → Servo_X_Angle_Set.
+				//   Do NOT assign anglex directly from raw sensor or target.
 				Init_CompareX += Servo_Position_PIDX(Init_CompareX, Servo_Position.Servo_TarXout);  // 位置式PID1运算 Init_CompareY当前舵机转动的位置
 				anglex = Servo_Compare_Angle(Init_CompareX);  // 将PID计算的输出比较值转换为角度值
 				
@@ -38,6 +42,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 				LIMIT(anglex, -90, 90);
 				LIMIT(angley, -90, 90);
 				
+				// [BUGFIX] Servo output: always clamp BEFORE writing to hardware.
+				//   Out-of-range angles cause mechanical damage or unpredictable motion.
 				Servo_X_Angle_Set(anglex);
 				Servo_Y_Angle_Set(angley);    // 设置舵机转动的角度
 				
@@ -70,6 +76,8 @@ void print(UART_HandleTypeDef* huart, const char* buf, ...) {  // 串口函数
 
 /*******************************************显示处理函数*******************************************/
 void OLED_Proc() {
+	// [BUGFIX] OLED buffer overflow guard: buf[22] is only 22 bytes.
+	//   Each sprintf must stay ≤21 chars (+NUL). Trailing spaces removed to prevent overflow.
 	char buf[22];
 	static __IO uint32_t uwTick_OLED_Speed;
 	
@@ -80,15 +88,15 @@ void OLED_Proc() {
 		
 		sprintf(buf, "       ");
 		OLED_ShowStr(0, 0, (uint8_t* )buf, 1);
-		sprintf(buf, "CompareY = %.2f   ", Init_CompareY);
+		sprintf(buf, "CompareY=%.2f", Init_CompareY);
 		OLED_ShowStr(0, 1, (uint8_t* )buf, 1);
-		sprintf(buf, "TarYCom = %d    ", Servo_Position.Servo_TarYout);
+		sprintf(buf, "TarYCom=%d", Servo_Position.Servo_TarYout);
 		OLED_ShowStr(0, 2, (uint8_t* )buf, 1);
-		sprintf(buf, "i = %d      ", i);
+		sprintf(buf, "i=%d", i);
 		OLED_ShowStr(0, 3, (uint8_t* )buf, 1);
-		sprintf(buf, "angley = %.2f      ", angley);
+		sprintf(buf, "angley=%.2f", angley);
 		OLED_ShowStr(0, 4, (uint8_t* )buf, 1);
-		sprintf(buf, "anglex = %.2f  ", anglex);
+		sprintf(buf, "anglex=%.2f", anglex);
 		OLED_ShowStr(0, 5, (uint8_t* )buf, 1);
 		sprintf(buf, "      ");
 		OLED_ShowStr(0, 6, (uint8_t* )buf, 1);
@@ -202,7 +210,10 @@ int calculateY(int x, float slope, int intercept) {
 
 // 根据一次函数的斜率和截距，计算 x 值  传入y计算x的值
 int calculateX(float y, float slope, float intercept) {
-    return (y - intercept) / slope;
+	// [BUGFIX] Div-by-zero guard: horizontal lines (slope=0) cause HardFault.
+	//   Return 0 as safe fallback — caller should use calculateY for horizontal edges.
+	if(slope == 0.0f) return 0;
+	return (y - intercept) / slope;
 }
 
 int myabs(int p) {
