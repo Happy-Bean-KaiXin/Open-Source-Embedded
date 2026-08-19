@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>运动目标控制与自动追踪系统 — 巡线轨迹仿真</title>
+<style>
+  :root{
+    --bg:#f5f7fa; --panel:#ffffff; --ink:#1f2933; --sub:#62707d;
+    --accent:#2f6fed; --accent2:#e0533d; --ok:#2faf6b; --warn:#e0a93d;
+    --line:#e3e8ef; --box:#2f6fed; --laser:#e0533d; --path:#16a085; --ghost:#b0b8c1;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+       background:var(--bg);color:var(--ink);padding:18px;}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--sub);font-size:13px;margin-bottom:16px}
+  .wrap{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+         padding:16px;box-shadow:0 1px 3px rgba(20,30,50,.05)}
+  .controls{width:330px;flex:0 0 auto}
+  .stage{flex:1 1 560px;min-width:520px}
+  .row{margin-bottom:14px}
+  label{display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--ink)}
+  .hint{font-size:11px;color:var(--sub);font-weight:400;margin-top:3px}
+  input[type=number],select{width:100%;padding:7px 9px;border:1px solid var(--line);
+         border-radius:8px;font-size:14px;background:#fff;color:var(--ink)}
+  input[type=range]{width:100%}
+  .stepval{font-weight:700;color:var(--accent)}
+  .btns{display:flex;gap:8px;flex-wrap:wrap}
+  button{cursor:pointer;border:none;border-radius:8px;padding:9px 14px;font-size:13px;
+         font-weight:600;background:var(--accent);color:#fff;transition:.15s}
+  button.sec{background:#eef2f8;color:var(--ink)}
+  button:hover{filter:brightness(.95)}
+  canvas{background:#0e1620;border-radius:10px;display:block;width:100%;height:auto}
+  .metrics{margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:8px 14px}
+  .metric{background:#fbfcfe;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+  .metric .k{font-size:11px;color:var(--sub)}
+  .metric .v{font-size:15px;font-weight:700;margin-top:2px}
+  .ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--accent2)}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--sub);margin-top:10px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .dot{width:11px;height:11px;border-radius:3px;display:inline-block}
+  details{margin-top:6px;border-top:1px dashed var(--line);padding-top:10px}
+  summary{cursor:pointer;font-size:13px;font-weight:600}
+  .corner-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .corner-grid div{font-size:12px;color:var(--sub)}
+  code{background:#eef2f8;padding:1px 5px;border-radius:4px;font-size:12px}
+</style>
+</head>
+<body>
+  <h1>运动目标控制与自动追踪系统 — 巡线轨迹仿真</h1>
+  <div class="sub">离线复刻 <code>contorl.c</code> 的 <code>Motion_TarCtrl</code> 状态机（已含竖边除零修复）。步长与 <code>contorl.h</code> 中的 <code>BIG_FRAME_STEP</code> / <code>BLACK_FRAME_STEP</code> 宏对应。</div>
+
+  <div class="wrap">
+    <!-- 控制面板 -->
+    <div class="panel controls">
+      <div class="row">
+        <label>方框预设</label>
+        <select id="preset">
+          <option value="big">标定矩形（Motion_TarCtrl · 步进 7px）</option>
+          <option value="a4">A4靶纸·标准位（210×297mm · 步进 1px）</option>
+          <option value="a4pos">A4靶纸·任意位置（移位，测固件 bug）</option>
+          <option value="a4roi">A4靶纸·贴边缘（BUG1修复前超窗口·现已可检测）</option>
+          <option value="overshoot">步长过大演示（步进 24px · 过冲/无法完成）</option>
+          <option value="screen">屏幕边框误检演示（应被 A4 滤波排除）</option>
+        </select>
+        <div class="hint">切换预设会自动填入对应的 4 角坐标与默认步长。</div>
+      </div>
+
+      <div class="row">
+        <label>巡线步长（每 10ms 周期的像素增量）<span class="stepval" id="stepLabel">7</span></label>
+        <input type="range" id="stepRange" min="1" max="20" value="7">
+        <input type="number" id="stepNum" min="1" max="40" value="7">
+        <div class="hint">对应 <code>contorl.h</code> 里的 <code>BIG_FRAME_STEP</code> / <code>BLACK_FRAME_STEP</code>。改完点“重置”生效。</div>
+      </div>
+
+      <div class="row">
+        <label>动画速度（每 tick 毫秒）</label>
+        <input type="range" id="speed" min="0" max="120" value="20">
+        <div class="hint">0 = 最快（每帧多 tick）。</div>
+      </div>
+
+      <div class="row">
+        <label class="chk"><input type="checkbox" id="bugMode"> 复现旧版竖边 bug（竖边 x 被算成 0）</label>
+        <div class="hint">勾选后禁用 fixed_x 修正，竖边会被画到屏幕最左侧，直观看到缺陷。</div>
+      </div>
+
+      <div class="row">
+        <label class="chk"><input type="checkbox" id="overlay"> 叠加标定矩形参照轨迹（对比步长 7 vs 1）</label>
+        <div class="hint">勾选后在当前仿真上叠加红色大方框轨迹（步长 7），直观对比两种步长的路径密度与耗时。</div>
+      </div>
+
+      <div class="row">
+        <label>起点模式（如何取“中心/起点”）</label>
+        <select id="startMode">
+          <option value="frame" selected>本框中心（固件主流程·A4 自身四角几何中心起步）</option>
+          <option value="corner">边框角点起步（备选方案·规避 BUG3·起点在胶带上）</option>
+          <option value="calib">沿用标定矩形中心（仅演示·复现修复前 BUG2）</option>
+        </select>
+        <div class="hint">固件宏 <code>BLACK_FRAME_START_FROM_CORNER</code>（默认 <strong>0</strong>）= <strong>主流程</strong>：从 <strong>A4 自身四角几何中心</strong>起步（即"本框中心"，BUG2 已修，不再借标定矩形中心），光斑先由中心走到首个角点、再 corner0→1→2→3→0 顺时针巡线；其中"中心→角点"段会穿过纸内约 13.6cm 脱离胶带（已知 BUG3 现象，作为设计代价接收）。置 <strong>1</strong> 则启用<strong>备选方案</strong>：直接从胶带<strong>角点起步</strong>，跳过该段、全程贴胶带（连续脱离 0cm），仅在需规避 BUG3 时启用。"沿用标定矩形中心"是<strong>修复前的旧行为</strong>（黑框错借另一模式 Motion_TarCtrl 的标定中心），<strong>固件已不再使用，仅作对照演示</strong>，用于直观看到 BUG2 当初跑偏的样子（详见脚本内 calib 说明块）。</div>
+      </div>
+
+      <details style="margin-top:4px">
+        <summary>BUG3 与评委风险说明（默认“本框中心”为何有一段脱离胶带）</summary>
+        <div class="hint" style="margin-top:8px;color:#b9892f">
+          <strong>一句话：默认“本框中心”模式下，光斑起点选在 A4 <em>纸内中心</em>（在白纸上、不在黑胶带上）。状态机第一步是“中心 → 首个胶带角点”，这一段光斑走在白纸<em>内部</em>，不在胶带上，约半对角线 ≈ 18cm 整段脱离（最近边约 13.6cm &gt; 5cm）。</strong>
+          按评分“<em>连续脱离胶带 &gt;5cm 记 0 分</em>”，这段会被判脱离。
+          它属于“以 A4 中心为起点”这个设计选择带来的代价，不是状态机算错（轨迹形状两侧一致），故称“已知现象”而非“崩溃 bug”。
+          <br><br>
+          <strong>评委会不会异议，取决于评分口径：</strong>
+          <ul style="margin:6px 0 0 18px">
+            <li>若评分只要求“<em>光斑上了胶带后，30s 内沿胶带顺时针走满一圈且全程贴胶带</em>”——那么“中心→角点”只是<em>归位/接近</em>动作，只要落在胶带后那段贴胶带走满即可，<u>不影响得分</u>（大多数电赛口径如此）。</li>
+            <li>若评分严格要求“<em>系统启动起，光斑任意时刻都不得偏离胶带 5cm</em>”——那这段归位就会扣分。此时把宏 <code>BLACK_FRAME_START_FROM_CORNER</code> 置 <strong>1</strong>（仿真切“边框角点起步”），让评分段直接从胶带角点开始，<em>全程在胶带上、连续脱离 0cm</em>，规避该风险。</li>
+          </ul>
+          <strong>注意（两种模式都有的硬件归位段）：</strong>系统刚触发时，激光伺服停在某物理位置；无论哪种起点模式，伺服都要先把它“移动到起点”才能开始计数。这段<em>物理归位</em>不在状态机里，若初位离胶带较远仍可能扫过白纸。要彻底零脱离，需把激光<em>静止/初始位置</em>也布置在（或贴近）某个胶带角点附近（硬件布置）。
+        </div>
+      </details>
+
+      <div class="row">
+        <label class="chk"><input type="checkbox" id="showROI" checked> 显示 find_rect 检测区（BUG1 已修复·整幅）</label>
+        <div class="hint">固件原把 ROI 硬编码为 (44,35,240,191) 且 <code>set_windowing</code> 同样裁剪——A4 超出此窗口即检测不到，阻断"任意位置"。现已移除，改为整幅 320×240 搜索，A4 可贴屏幕任意位置。</div>
+      </div>
+
+      <div class="row btns">
+        <button id="play">▶ 播放</button>
+        <button id="step" class="sec">单步</button>
+        <button id="reset" class="sec">重置</button>
+      </div>
+
+      <details>
+        <summary>高级：自定义方框与中心坐标（画布 240×191·BUG1 修复后 A4 可放任意处）</summary>
+        <div class="corner-grid" style="margin-top:10px">
+          <div>角0 X<input type="number" id="c0x" value="32"></div>
+          <div>角0 Y<input type="number" id="c0y" value="7"></div>
+          <div>角1 X<input type="number" id="c1x" value="208"></div>
+          <div>角1 Y<input type="number" id="c1y" value="7"></div>
+          <div>角2 X<input type="number" id="c2x" value="208"></div>
+          <div>角2 Y<input type="number" id="c2y" value="183"></div>
+          <div>角3 X<input type="number" id="c3x" value="32"></div>
+          <div>角3 Y<input type="number" id="c3y" value="183"></div>
+          <div>中心 X<input type="number" id="cx" value="120"></div>
+          <div>中心 Y<input type="number" id="cy" value="95"></div>
+        </div>
+        <div class="hint" style="margin-top:6px">角点须按“角0→角1→角2→角3→回到角0”的环序排列，否则路径会画成交叉线。</div>
+      </details>
+    </div>
+
+    <!-- 舞台 -->
+    <div class="panel stage">
+      <canvas id="cv" width="576" height="458"></canvas>
+      <div class="legend">
+        <span><i class="dot" style="background:#f3ecd9;border:1px solid #c9bfa3"></i>A4 靶纸(纸面)</span>
+        <span><i class="dot" style="background:#3a3a3a"></i>黑胶带边框(1.8cm·轨迹应贴此带)</span>
+        <span><i class="dot" style="background:var(--box)"></i>目标方框/角点</span>
+        <span><i class="dot" style="background:var(--path)"></i>已走轨迹</span>
+        <span><i class="dot" style="background:var(--laser)"></i>激光当前点</span>
+        <span><i class="dot" style="background:var(--ghost)"></i>理想规格框</span>
+        <span><i class="dot" style="background:#e0533d"></i>标定矩形参照(步长7)</span>
+      </div>
+      <div class="hint" style="margin-top:8px;color:#b9892f">对照赛题 (3)(4)：A4 靶纸 = 沿四边贴 1.8cm 黑胶带构成的长方形（210×297mm，非正方）。✅ 已实现：检测黑矩形=胶带边框、<strong>顺时针</strong>一周（clockwise_sort 保证）、<strong>任意旋转角</strong>（逐边算斜率）、30s 内（步长1）。✅ <strong>固件已全部修复三项并加滤噪</strong>：① <code>find_rect</code> 移除 ROI 硬编码 + 取消 <code>set_windowing</code> 裁剪 → 支持"任意位置"（BUG1），并新增 <strong>A4 长宽比(1.414±0.18)+面积占比(&lt;55%) 滤波</strong>（<code>is_a4_target</code>）排除屏幕边框误检；② 起点改用 <strong>A4 自身四角几何中心</strong>（修复 BUG2）；③ BUG3 提供双模式：默认 <code>BLACK_FRAME_START_FROM_CORNER=0</code> 走<strong>主流程——以 A4 中心为起点</strong>（经 Centy_To_Start，中心→角点段约 13.6cm 脱离胶带为已知现象），置 <strong>1</strong> 则切换为<strong>备选方案——从胶带角点起步</strong>规避 BUG3（全程贴胶带、连续脱离 0cm）。用"起点模式"与"A4任意位置/贴边缘/屏幕边框误检"预设对比固件当前 vs 修复前。</div>
+
+      <div class="metrics">
+        <div class="metric"><div class="k">状态 / 当前 tick</div><div class="v" id="mState">—</div></div>
+        <div class="metric"><div class="k">耗时（tick×10ms）</div><div class="v" id="mTime">—</div></div>
+        <div class="metric"><div class="k">四边长度 (px / m)</div><div class="v" id="mSides">—</div></div>
+        <div class="metric"><div class="k">形状（长:宽）</div><div class="v" id="mSquare">—</div></div>
+        <div class="metric"><div class="k">边界覆盖</div><div class="v" id="mCover">—</div></div>
+        <div class="metric"><div class="k">已访问角点数</div><div class="v" id="mCorners">—</div></div>
+        <div class="metric"><div class="k">轨迹完成</div><div class="v" id="mDone">—</div></div>
+        <div class="metric"><div class="k">步长 / 帧预设</div><div class="v" id="mStep">—</div></div>
+        <div class="metric"><div class="k">脱离胶带（累计 / 最大连续）</div><div class="v" id="mOff">—</div></div>
+        <div class="metric"><div class="k">find_rect 检测 ROI</div><div class="v" id="mROI">—</div></div>
+        <div class="metric"><div class="k">A4 检测滤波(长宽比+面积)</div><div class="v" id="mA4filter">—</div></div>
+      </div>
+
+      <div class="row" style="margin-top:18px">
+        <label>总览图（始终含<strong>标定矩形红大方框</strong>，叠加当前目标）</label>
+        <canvas id="cvOver" width="576" height="458"></canvas>
+        <div class="hint">总览图用于看“A4 靶纸相对红大方框”的空间关系：红框虚线 = 标定矩形(0.5×0.5m)，蓝框 = 当前选中目标（A4/大框）。当预设选 A4 时，主图聚焦 A4，总览图则同时显示大框与 A4 的位置。画布仅作显示缩放（SCALE=2.4×），不影响任何检测/控制逻辑。</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ================= 仿真参数（与 contorl.h 宏一致）================= */
+const WIN_W = 240, WIN_H = 191;
+const PX_PER_M = 352.0;            // 必须与 contorl.h 的 PX_PER_M 宏一致（176px ≈ 0.5m；真机实测后两侧同步修改）
+const SCALE = 576 / WIN_W;         // 画布缩放
+
+/* ================= 几何/数学辅助（移植自 sim_test.py）================= */
+function myabs(p){ return p > 0 ? p : -p; }
+function calcSlope(x1,y1,x2,y2){ return (Math.abs(x2-x1) < 1e-9) ? Infinity : (y2-y1)/(x2-x1); }
+function calcInt(x1,y1,slope){ return y1 - slope*x1; }
+function calcY(x,slope,intercept){ return slope*x + intercept; }
+function calcX(y,slope,intercept){ if(!isFinite(slope)) return 0; return (y - intercept)/slope; }
+
+/* 胶带边框 / 检测ROI 相关（用于 (3)(4) 达标可视化） */
+function pointToSeg(px,py,ax,ay,bx,by){
+  const dx=bx-ax, dy=by-ay, l2=dx*dx+dy*dy;
+  if(l2<1e-9) return Math.hypot(px-ax,py-ay);
+  let t=((px-ax)*dx+(py-ay)*dy)/l2; t=Math.max(0,Math.min(1,t));
+  return Math.hypot(px-(ax+t*dx), py-(ay+t*dy));
+}
+function distToBorder(px,py,RX,RY){
+  let m=Infinity;
+  for(let i=0;i<4;i++){ const a=i,b=(i+1)%4; m=Math.min(m, pointToSeg(px,py,RX[a],RY[a],RX[b],RY[b])); }
+  return m;
+}
+const ROI={x:0,y:0,w:WIN_W,h:WIN_H};                 // BUG1 已修复：检测区=整幅(全屏可检测)
+const TAPE_HALF=0.009*PX_PER_M;                    // 1.8cm 胶带半宽(px)
+function inROI(RX,RY){ return RX.every((x,i)=> x>=ROI.x && x<=ROI.x+ROI.w && RY[i]>=ROI.y && RY[i]<=ROI.y+ROI.h); }
+const RED_CAL={x:120,y:95};                         // 红框标定中心（固件错误地把它当黑框起点）
+
+/* ============ A4 靶纸检测滤波（与 mv/openmv/main.py 的 is_a4_target 一致，避免误检屏幕边框）============ */
+const A4_ASPECT = 297/210;        // ≈1.414（ISO 216 标准长:宽）
+const A4_ASPECT_TOL = 0.18;      // 长宽比容差（胶带贴歪/透视畸变）
+const A4_MAX_AREA_FRAC = 0.55;    // 面积占比上限（超过视为屏幕边框，排除）
+function rectAspect(RX,RY){
+  const d=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
+  const edges=[d([RX[0],RY[0]],[RX[1],RY[1]]),d([RX[1],RY[1]],[RX[2],RY[2]]),
+               d([RX[2],RY[2]],[RX[3],RY[3]]),d([RX[3],RY[3]],[RX[0],RY[0]])];
+  edges.sort((a,b)=>a-b);
+  const short=(edges[0]+edges[1])/2, long=(edges[2]+edges[3])/2;
+  return long/short;
+}
+function isA4Target(RX,RY){
+  const aspect=rectAspect(RX,RY);
+  if(Math.abs(aspect-A4_ASPECT) > A4_ASPECT_TOL) return false;
+  const w=Math.max(...RX)-Math.min(...RX), h=Math.max(...RY)-Math.min(...RY);
+  const frac=(w*h)/(WIN_W*WIN_H);          // 与固件 r.w()*r.h()/(img.width*img.height) 一致
+  if(frac > A4_MAX_AREA_FRAC) return false;
+  return true;
+}
+
+/* ============ calib 模式说明（对照演示，非固件当前行为）============
+ * 仿真“起点模式 → 沿用标定矩形中心(calib)”刻意复现【修复前的 BUG2】：
+ *   旧固件让黑框(A4)借用 另一模式 Motion_TarCtrl 的“标定矩形中心”
+ *   (Flag.x_centery / y_centery，由红大方框手动标定得到) 作为起点，
+ *   而并非 A4 自身四角几何中心。当 A4 不在红框标定位时，几何错乱，
+ *   轨迹整体跑偏（仿真里表现为起点落在红框标定中心 120,95 处）。
+ *
+ * 当前固件(宏=0 主流程)【已修复 BUG2】：起点改为 A4 自身四角几何中心，
+ * 不再借用红框标定中心。因此 calib 选项【仅为对照演示】，用于直观看到
+ * “当初那个 bug 长什么样”，不代表真机现行为。
+ *
+ * 想看效果：选 A4 预设 + 起点模式 = 沿用标定矩形中心，即可见起点错到红框中心。
+ * ===================================================================== */
+
+/* ================= 状态枚举（与 contorl.h 一致）================= */
+const BOX=0, ANY=1, CROSS=2;
+const CENTRY_X=3, CENTRY_Y=4, START_X=5, START_Y=6, SECOND_X=7, SECOND_Y=8,
+      THRID_X=9, THRID_Y=10, FOURTH_X=11, FOURTH_Y=12;
+const F_CENTRY=0, F_START=1, F_SECOND=2, F_THRID=3, F_FOURTH=4;
+
+/* ================= 仿真版运动控制器（与 contorl.c 逐行对应）=================
+ * Motion_TarCtrl_Sim       <-> 固件 Motion_TarCtrl      （红大方框/标定矩形，BIG_FRAME_STEP=7）
+ * Motion_TarCtrl_Black_Sim <-> 固件 Motion_TarCtrl_Black（A4 黑胶带框，BLACK_FRAME_STEP=1）
+ * 两个函数结构与固件一一对应，便于“逐行”比对。bugMode=true 复现竖边旧 bug。
+ * 几何辅助(myabs/calcSlope/...)与状态枚举(BOX..F_FOURTH)沿用上方定义。
+ * 也可在 sim/sim_code/Motion_TarCtrl_Sim.js 中单独阅读/运行这两个函数。
+ ===================================================================== */
+
+/* =============================================================================
+ * 仿真版 Motion_TarCtrl  —— 对应固件 Motion_TarCtrl（红大方框）
+ * 与固件一致：Box_Square_State → Any_Rectang_Box_State(Centy_To_Start 用传入中心 Cx,Cy)
+ *            → Cross_State(分发) → Centry_X/Y_Start → Start_X/Y_Second → ... → Fourth_X/Y_End(回角点0)。
+ * 完成阈值：非第四段 <4、第四段 <10（与 contorl.c 中 BIG_FRAME_STEP 路径一致）。
+ * ============================================================================= */
+function Motion_TarCtrl_Sim(RX, RY, Cx, Cy, step, bugMode, maxTicks){
+  const F = {
+    x_centry:Cx, y_centry:Cy,
+    FSTATE: F_CENTRY,
+    x_actual:Cx, y_actual:Cy,
+    Slope:0, Intercpet:0,
+    fixed_x:null, dx:0, dy:0, Is_10ms_YES:1,
+    X_AXIS:0, Y_AXIS:0
+  };
+  let Laser_State = BOX;
+  const path = [];
+  let doneTick = -1;
+  const TH_NON = 4, TH_FOURTH = 10;   // 非第四段<4、第四段<10（与 contorl.c 一致）
+
+  function line_x(y){
+    if(!bugMode && F.fixed_x !== null) return F.fixed_x;   // 修正版：竖边保持 x 常量
+    return calcX(y, F.Slope, F.Intercpet);                 // 旧版：竖边 (y-int)/inf ≈ 0
+  }
+
+  for(let tick=0; tick<maxTicks; tick++){
+    F.Is_10ms_YES = 1;
+
+    if(Laser_State === BOX){
+      Laser_State = ANY;
+    } else if(Laser_State === ANY){
+      if(F.FSTATE === F_CENTRY){
+        F.Slope = calcSlope(F.x_centry,F.y_centry,RX[0],RY[0]);
+        F.fixed_x = (F.Slope===Infinity)? F.x_centry : null;
+        F.Intercpet = calcInt(F.x_centry,F.y_centry,F.Slope);
+        F.dx = RX[0]-F.x_centry; F.dy = RY[0]-F.y_centry;
+        Laser_State = CROSS;
+      } else if(F.FSTATE === F_START){
+        F.Slope = calcSlope(RX[0],RY[0],RX[1],RY[1]);
+        F.fixed_x = (F.Slope===Infinity)? RX[0] : null;
+        F.Intercpet = calcInt(RX[0],RY[0],F.Slope);
+        F.dx = RX[1]-RX[0]; F.dy = RY[1]-RY[0];
+        Laser_State = CROSS;
+      } else if(F.FSTATE === F_SECOND){
+        F.Slope = calcSlope(RX[1],RY[1],RX[2],RY[2]);
+        F.fixed_x = (F.Slope===Infinity)? RX[1] : null;
+        F.Intercpet = calcInt(RX[1],RY[1],F.Slope);
+        F.dx = RX[2]-RX[1]; F.dy = RY[2]-RY[1];
+        Laser_State = CROSS;
+      } else if(F.FSTATE === F_THRID){
+        F.Slope = calcSlope(RX[2],RY[2],RX[3],RY[3]);
+        F.fixed_x = (F.Slope===Infinity)? RX[2] : null;
+        F.Intercpet = calcInt(RX[2],RY[2],F.Slope);
+        F.dx = RX[3]-RX[2]; F.dy = RY[3]-RY[2];
+        Laser_State = CROSS;
+      } else if(F.FSTATE === F_FOURTH){
+        F.Slope = calcSlope(RX[3],RY[3],RX[0],RY[0]);
+        F.fixed_x = (F.Slope===Infinity)? RX[3] : null;
+        F.Intercpet = calcInt(RX[3],RY[3],F.Slope);
+        F.dx = RX[0]-RX[3]; F.dy = RY[0]-RY[3];
+        Laser_State = CROSS;
+      }
+    } else if(Laser_State === CROSS){
+      if(F.FSTATE === F_CENTRY){
+        if(myabs(F.dx)-myabs(F.dy) > 0){ F.x_actual=F.x_centry; F.y_actual=F.y_centry; Laser_State=CENTRY_X; }
+        else { F.x_actual=F.x_centry; F.y_actual=F.y_centry; Laser_State=CENTRY_Y; }
+      } else if(F.FSTATE === F_START){
+        if(myabs(F.dx)-myabs(F.dy) > 0){ F.x_actual=RX[0]; F.y_actual=RY[0]; Laser_State=START_X; }
+        else { F.y_actual=RY[0]; F.x_actual=RX[0]; Laser_State=START_Y; }
+      } else if(F.FSTATE === F_SECOND){
+        if(myabs(F.dx)-myabs(F.dy) > 0){ F.x_actual=RX[1]; F.y_actual=RY[1]; Laser_State=SECOND_X; }
+        else { F.x_actual=RX[1]; F.y_actual=RY[1]; Laser_State=SECOND_Y; }
+      } else if(F.FSTATE === F_THRID){
+        if(myabs(F.dx)-myabs(F.dy) > 0){ F.x_actual=RX[2]; F.y_actual=RY[2]; Laser_State=THRID_X; }
+        else { F.x_actual=RX[2]; F.y_actual=RY[2]; Laser_State=THRID_Y; }
+      } else if(F.FSTATE === F_FOURTH){
+        if(myabs(F.dx)-myabs(F.dy) > 0){ F.x_actual=RX[3]; F.y_actual=RY[3]; Laser_State=FOURTH_X; }
+        else { F.x_actual=RX[3]; F.y_actual=RY[3]; Laser_State=FOURTH_Y; }
+      }
+    } else if(Laser_State === CENTRY_X){
+      if(F.dx>0){ if(F.Is_10ms_YES===1){ F.x_actual+=step; F.y_actual=calcY(F.x_actual,F.Slope,F.Intercpet); F.Is_10ms_YES=0;
+        if(myabs(F.x_actual-RX[0])<TH_NON){ F.y_actual=RY[0]; F.x_actual=RX[0]; F.FSTATE=F_START; Laser_State=ANY; } } }
+      else { if(F.Is_10ms_YES===1){ F.x_actual-=step; F.y_actual=calcY(F.x_actual,F.Slope,F.Intercpet); F.Is_10ms_YES=0;
+        if(myabs(F.x_actual-RX[0])<TH_NON){ F.y_actual=RY[0]; F.x_actual=RX[0]; F.FSTATE=F_START; Laser_State=ANY; } } }
+    } else if(Laser_State === CENTRY_Y){
+      if(F.dy>0){ if(F.Is_10ms_YES===1){ F.Is_10ms_YES=0; F.y_actual+=step;
+        if(myabs(F.y_actual-RY[0])<TH_NON){ F.x_actual=RX[0]; F.y_actual=RY[0]; F.FSTATE=F_START; Laser_State=ANY; } } }
+      else { if(F.Is_10ms_YES===1){ F.Is_10ms_YES=0; F.y_actual-=step;
+        if(myabs(F.y_actual-RY[0])<TH_NON){ F.x_actual=RX[0]; F.y_actual=RY[0]; F.FSTATE=F_START; Laser_State=ANY; } } }
+    } else if(Laser_State === START_X){
+      if(F.dx>0){ if(F.Is_10ms_YES===1){ F.x_actual+=step; F.y_actual=calcY(F.x_actual,F.Slope,F.Intercpet); F.Is_10ms_YES=0;
+        if(myabs(F.x_actual-RX[1])<TH_NON){ F.y_actual=RY[1]; F.x_actual=RX[1]; F.FSTATE=F_SECOND; Laser_State=ANY; } } }
+      else { if(F.Is_10ms_YES===1){ F.x_actual-=step; F.y_actual=calcY(F.x_actual,F.Slope,F.Intercpet); F.Is_10ms_YES=0;
+        if(myabs(F.x_actual-RX[1])<TH_NON){ F.y_actual=RY[1]; F.x_actual=RX[1]; F.FSTATE=F_SECOND; Laser_State=ANY; } } }
+    } else if(Laser_State === START_Y){
+      if(F.dy>0){ if(F.Is_10ms_YES===1){ F.Is_10ms_YES=0; F.y_actual+=step; F.x_actual=line_x(F.y_actual);
+        if(myabs(F.y_actual-RY[1])<TH_NON){ F.x_actual=RX[1]; F.y_actual=RY[1]; F.FSTATE=F_SECOND; Laser_State=ANY; } } }
+      else { if(F.Is_10ms_YES===1){ F.Is_10ms_YES=0; F.y_actual-=step; F.x_actual=line_x(F.y_actual);
+        if(myabs(F.y_actual-RY[1])<TH_NON){ F.x_actual=RX[1]; F.y_actual=RY[1]; F.FSTATE=F_SECOND; Laser_State=ANY; } } }
+    } else if(Laser_State === SECOND_X){
+      if(F.dx>0){ if(F.Is_10ms_YES===1){ F.x_actual+=step; F.y_actual=calcY(F.x_actual,F.Slope,F.Intercpet); F.Is_10ms_YES=0;
+        if(myabs(F.x_actual-RX[2])<TH_NON){ F.y_actual=RY[2]; F.x_actual=RX[2]; F.FSTATE=F_THRID; Laser_State=ANY; } } }
+      else { if(F.Is_10ms_YES===1){ F.x_actual-=step; F.y_actual=calcY(F.x_actual,F.Slope,F.Intercpet); F.Is_10ms_YES=0;
+        if(myabs(F.x_actual-RX[2])<TH_NON){ F.y_actual=RY[2]; F.x_actual=RX[2]; F.FSTATE=F_THRID; Laser_State=ANY; } } }
+    } else if(Laser_State === SECOND_Y){
+      if(F.dy>0){ if(F.Is_10ms_YES===1){ F.Is_10ms_YES=0; F.y_actual+=step; F.x_actual=line_x(F.y_actual);
+        if(myabs(F.y_actual-RY[2])<TH_NON){ F.x_actual=RX[2]; F.y_actual=RY[2]; F.FSTATE=F_THRID; Laser_State=ANY; } } }
+      else { if(F.Is_10ms_YES===1){ F.Is_10ms_YES=0; F.y_actual-=step; F.x_actual=line_x(F.y_actual);
+        if(myabs(F.y_actual-RY[2])<TH_NON){ F.x_actual=RX[2]; F.y_actual=RY[2]; F.FSTATE=F_THRID; Laser_State=ANY; } } }
+    } else if(Laser_State === THRID_X){
+      if(F.dx>0){ if(F.Is_10ms_YES===1){ F.x_actual+=step; F.y_actual=calcY(F.x_actual,F.Slope,F.Intercpet); F.Is_10ms_YES=0;
+        if(myabs(F.x_actual-RX[3])<TH_NON){ F.y_actual=RY[3]; F.x_actual=RX[3]; F.FSTATE=F_FOURTH; Laser_State=ANY; } } }
+      else { if(F.Is_10ms_YES===1){ F.x_actual-=step; F.y_actual=calcY(F.x_actual,F.Slope,F.Intercpet); F.Is_10ms_YES=0;
+        if(myabs(F.x_actual-RX[3])<TH_NON){ F.y_actual=RY[3]; F.x_actual=RX[3]; F.FSTATE=F_FOURTH; Laser_State=ANY; } } }
+    } else if(Laser_State === THRID_Y){
+      if(F.dy>0){ if(F.Is_10ms_YES===1){ F.Is_10ms_YES=0; F.y_actual+=step; F.x_actual=line_x(F.y_actual);
+        if(myabs(F.y_actual-RY[3])<TH_NON){ F.x_actual=RX[3]; F.y_actual=RY[3]; F.FSTATE=F_FOURTH; Laser_State=ANY; } } }
+      else { if(F.Is_10ms_YES===1){ F.Is_10ms_YES=0; F.y_actual-=step; F.x_actual=line_x(F.y_actual);
+        if(myabs(F.y_actual-RY[3])<TH_NON){ F.x_actual=RX[3]; F.y_actual=RY[3]; F.FSTATE=F_FOURTH; Laser_State=ANY; } } }
+    } else if(Laser_State === FOURTH_X){
+      if(F.dx>0){ if(F.Is_10ms_YES===1){ F.Is_10ms_YES=0; F.x_actual+=step; F.y_actual=calcY(F.x_actual,F.Slope,F.Intercpet);
+        if(myabs(F.x_actual-RX[0])<TH_FOURTH){ F.y_actual=RY[0]; F.x_actual=RX[0]; F.X_AXIS=F.x_actual; F.Y_AXIS=F.y_actual; } } }
+      else { if(F.Is_10ms_YES===1){ F.Is_10ms_YES=0; F.x_actual-=step; F.y_actual=calcY(F.x_actual,F.Slope,F.Intercpet);
+        if(myabs(F.x_actual-RX[0])<TH_FOURTH){ F.y_actual=RY[0]; F.x_actual=RX[0]; F.X_AXIS=F.x_actual; F.Y_AXIS=F.y_actual; } } }
+    } else if(Laser_State === FOURTH_Y){
+      if(F.dy>0){ if(F.Is_10ms_YES===1){ F.Is_10ms_YES=0; F.y_actual+=step; F.x_actual=line_x(F.y_actual);
+        if(myabs(F.y_actual-RY[0])<TH_FOURTH){ F.x_actual=RX[0]; F.y_actual=RY[0]; F.X_AXIS=F.x_actual; F.Y_AXIS=F.y_actual; } } }
+      else { if(F.Is_10ms_YES===1){ F.Is_10ms_YES=0; F.y_actual-=step; F.x_actual=line_x(F.y_actual);
+        if(myabs(F.y_actual-RY[0])<TH_FOURTH){ F.x_actual=RX[0]; F.y_actual=RY[0]; F.X_AXIS=F.x_actual; F.Y_AXIS=F.y_actual; } } }
+    }
+
+    path.push([F.x_actual, F.y_actual]);
+
+    // 完成判定：进入第四段且首次抵达起点角
+    if(doneTick < 0 && F.FSTATE === F_FOURTH &&
+       myabs(F.x_actual-RX[0]) < TH_NON && myabs(F.y_actual-RY[0]) < TH_NON){
+      doneTick = tick;
+    }
+  }
+  return { path, doneTick, finalF:F };
+}
+
+/* =============================================================================
+ * 仿真版 Motion_TarCtrl_Black  —— 对应固件 Motion_TarCtrl_Black（A4 黑胶带框）
+ * 与固件一致：
+ *   - Box_Square_State 含 #if BLACK_FRAME_START_FROM_CORNER 分支（JS: startFromCorner）：
+ *       角点起步 → x_actual=corner0、FSTATE=Start_To_Second（规避 BUG3）；
+ *       否则     → FSTATE=Centy_To_Start（主流程）。
+ *   - Centy_To_Start 起点取【黑框自身四角几何中心 bx_c/by_c】（BUG2 修复），非红框标定中心。
+ *   - 完成阈值全程 <2（与 contorl.c 中 BLACK_FRAME_STEP=1 路径一致）。
+ * ============================================================================= */
+function Motion_TarCtrl_Black_Sim(RX, RY, step, startFromCorner, bugMode, maxTicks){
+  // 黑框中心：BUG2 修复后使用自身四角几何中心 bx_c/by_c（Centy_To_Start 分支内部计算）
+  const bx_c = (RX[0]+RX[1]+RX[2]+RX[3]) / 4;
+  const by_c = (RY[0]+RY[1]+RY[2]+RY[3]) / 4;
+  const F = {
+    x_centry:bx_c, y_centry:by_c,
+    FSTATE: startFromCorner ? F_START : F_CENTRY,   // #if BLACK_FRAME_START_FROM_CORNER
+    x_actual: startFromCorner ? RX[0] : bx_c,
+    y_actual: startFromCorner ? RY[0] : by_c,
+    Slope:0, Intercpet:0,
+    fixed_x:null, dx:0, dy:0, Is_10ms_YES:1,
+    X_AXIS:0, Y_AXIS:0
+  };
+  let Laser_State = BOX;
+  const path = [];
+  let doneTick = -1;
+  const TH = 2;   // 黑框所有段完成阈值均 <2（与 contorl.c BLACK_FRAME_STEP=1 一致）
+
+  function line_x(y){
+    if(!bugMode && F.fixed_x !== null) return F.fixed_x;   // 修正版：竖边保持 x 常量
+    return calcX(y, F.Slope, F.Intercpet);                 // 旧版：竖边 (y-int)/inf ≈ 0
+  }
+
+  for(let tick=0; tick<maxTicks; tick++){
+    F.Is_10ms_YES = 1;
+
+    if(Laser_State === BOX){
+      Laser_State = ANY;
+      if(startFromCorner){   // 备选方案（规避 BUG3）：直接从胶带角点[0]起步，跳过"中心→角点"脱胶段
+        F.x_actual = RX[0];
+        F.y_actual = RY[0];
+        F.FSTATE   = F_START;
+      } else {
+        F.FSTATE   = F_CENTRY;
+      }
+    } else if(Laser_State === ANY){
+      if(F.FSTATE === F_CENTRY){
+        // 修复 BUG2：使用黑框自身四角几何中心 bx_c/by_c
+        F.Slope = calcSlope(bx_c,by_c,RX[0],RY[0]);
+        F.fixed_x = (F.Slope===Infinity)? bx_c : null;
+        F.Intercpet = calcInt(bx_c,by_c,F.Slope);
+        F.dx = RX[0]-bx_c; F.dy = RY[0]-by_c;
+        Laser_State = CROSS;
+      } else if(F.FSTATE === F_START){
+        F.Slope = calcSlope(RX[0],RY[0],RX[1],RY[1]);
+        F.fixed_x = (F.Slope===Infinity)? RX[0] : null;
+        F.Intercpet = calcInt(RX[0],RY[0],F.Slope);
+        F.dx = RX[1]-RX[0]; F.dy = RY[1]-RY[0];
+        Laser_State = CROSS;
+      } else if(F.FSTATE === F_SECOND){
+        F.Slope = calcSlope(RX[1],RY[1],RX[2],RY[2]);
+        F.fixed_x = (F.Slope===Infinity)? RX[1] : null;
+        F.Intercpet = calcInt(RX[1],RY[1],F.Slope);
+        F.dx = RX[2]-RX[1]; F.dy = RY[2]-RY[1];
+        Laser_State = CROSS;
+      } else if(F.FSTATE === F_THRID){
+        F.Slope = calcSlope(RX[2],RY[2],RX[3],RY[3]);
+        F.fixed_x = (F.Slope===Infinity)? RX[2] : null;
+        F.Intercpet = calcInt(RX[2],RY[2],F.Slope);
+        F.dx = RX[3]-RX[2]; F.dy = RY[3]-RY[2];
+        Laser_State = CROSS;
+      } else if(F.FSTATE === F_FOURTH){
+        F.Slope = calcSlope(RX[3],RY[3],RX[0],RY[0]);
+        F.fixed_x = (F.Slope===Infinity)? RX[3] : null;
+        F.Intercpet = calcInt(RX[3],RY[3],F.Slope);
+        F.dx = RX[0]-RX[3]; F.dy = RY[0]-RY[3];
+        Laser_State = CROSS;
+      }
+    } else if(Laser_State === CROSS){
+      if(F.FSTATE === F_CENTRY){
+        if(myabs(F.dx)-myabs(F.dy) > 0){ F.x_actual=bx_c; F.y_actual=by_c; Laser_State=CENTRY_X; }
+        else { F.x_actual=bx_c; F.y_actual=by_c; Laser_State=CENTRY_Y; }
+      } else if(F.FSTATE === F_START){
+        if(myabs(F.dx)-myabs(F.dy) > 0){ F.x_actual=RX[0]; F.y_actual=RY[0]; Laser_State=START_X; }
+        else { F.y_actual=RY[0]; F.x_actual=RX[0]; Laser_State=START_Y; }
+      } else if(F.FSTATE === F_SECOND){
+        if(myabs(F.dx)-myabs(F.dy) > 0){ F.x_actual=RX[1]; F.y_actual=RY[1]; Laser_State=SECOND_X; }
+        else { F.x_actual=RX[1]; F.y_actual=RY[1]; Laser_State=SECOND_Y; }
+      } else if(F.FSTATE === F_THRID){
+        if(myabs(F.dx)-myabs(F.dy) > 0){ F.x_actual=RX[2]; F.y_actual=RY[2]; Laser_State=THRID_X; }
+        else { F.x_actual=RX[2]; F.y_actual=RY[2]; Laser_State=THRID_Y; }
+      } else if(F.FSTATE === F_FOURTH){
+        if(myabs(F.dx)-myabs(F.dy) > 0){ F.x_actual=RX[3]; F.y_actual=RY[3]; Laser_State=FOURTH_X; }
+        else { F.x_actual=RX[3]; F.y_actual=RY[3]; Laser_State=FOURTH_Y; }
+      }
+    } else if(Laser_State === CENTRY_X){
+      if(F.dx>0){ if(F.Is_10ms_YES===1){ F.x_actual+=step; F.y_actual=calcY(F.x_actual,F.Slope,F.Intercpet); F.Is_10ms_YES=0;
+        if(myabs(F.x_actual-RX[0])<TH){ F.y_actual=RY[0]; F.x_actual=RX[0]; F.FSTATE=F_START; Laser_State=ANY; } } }
+      else { if(F.Is_10ms_YES===1){ F.x_actual-=step; F.y_actual=calcY(F.x_actual,F.Slope,F.Intercpet); F.Is_10ms_YES=0;
+        if(myabs(F.x_actual-RX[0])<TH){ F.y_actual=RY[0]; F.x_actual=RX[0]; F.FSTATE=F_START; Laser_State=ANY; } } }
+    } else if(Laser_State === CENTRY_Y){
+      if(F.dy>0){ if(F.Is_10ms_YES===1){ F.Is_10ms_YES=0; F.y_actual+=step;
+        if(myabs(F.y_actual-RY[0])<TH){ F.x_actual=RX[0]; F.y_actual=RY[0]; F.FSTATE=F_START; Laser_State=ANY; } } }
+      else { if(F.Is_10ms_YES===1){ F.Is_10ms_YES=0; F.y_actual-=step;
+        if(myabs(F.y_actual-RY[0])<TH){ F.x_actual=RX[0]; F.y_actual=RY[0]; F.FSTATE=F_START; Laser_State=ANY; } } }
+    } else if(Laser_State === START_X){
+      if(F.dx>0){ if(F.Is_10ms_YES===1){ F.x_actual+=step; F.y_actual=calcY(F.x_actual,F.Slope,F.Intercpet); F.Is_10ms_YES=0;
+        if(myabs(F.x_actual-RX[1])<TH){ F.y_actual=RY[1]; F.x_actual=RX[1]; F.FSTATE=F_SECOND; Laser_State=ANY; } } }
+      else { if(F.Is_10ms_YES===1){ F.x_actual-=step; F.y_actual=calcY(F.x_actual,F.Slope,F.Intercpet); F.Is_10ms_YES=0;
+        if(myabs(F.x_actual-RX[1])<TH){ F.y_actual=RY[1]; F.x_actual=RX[1]; F.FSTATE=F_SECOND; Laser_State=ANY; } } }
+    } else if(Laser_State === START_Y){
+      if(F.dy>0){ if(F.Is_10ms_YES===1){ F.Is_10ms_YES=0; F.y_actual+=step; F.x_actual=line_x(F.y_actual);
+        if(myabs(F.y_actual-RY[1])<TH){ F.x_actual=RX[1]; F.y_actual=RY[1]; F.FSTATE=F_SECOND; Laser_State=ANY; } } }
+      else { if(F.Is_10ms_YES===1){ F.Is_10ms_YES=0; F.y_actual-=step; F.x_actual=line_x(F.y_actual);
+        if(myabs(F.y_actual-RY[1])<TH){ F.x_actual=RX[1]; F.y_actual=RY[1]; F.FSTATE=F_SECOND; Laser_State=ANY; } } }
+    } else if(Laser_State === SECOND_X){
+      if(F.dx>0){ if(F.Is_10ms_YES===1){ F.x_actual+=step; F.y_actual=calcY(F.x_actual,F.Slope,F.Intercpet); F.Is_10ms_YES=0;
+        if(myabs(F.x_actual-RX[2])<TH){ F.y_actual=RY[2]; F.x_actual=RX[2]; F.FSTATE=F_THRID; Laser_State=ANY; } } }
+      else { if(F.Is_10ms_YES===1){ F.x_actual-=step; F.y_actual=calcY(F.x_actual,F.Slope,F.Intercpet); F.Is_10ms_YES=0;
+        if(myabs(F.x_actual-RX[2])<TH){ F.y_actual=RY[2]; F.x_actual=RX[2]; F.FSTATE=F_THRID; Laser_State=ANY; } } }
+    } else if(Laser_State === SECOND_Y){
+      if(F.dy>0){ if(F.Is_10ms_YES===1){ F.Is_10ms_YES=0; F.y_actual+=step; F.x_actual=line_x(F.y_actual);
+        if(myabs(F.y_actual-RY[2])<TH){ F.x_actual=RX[2]; F.y_actual=RY[2]; F.FSTATE=F_THRID; Laser_State=ANY; } } }
+      else { if(F.Is_10ms_YES===1){ F.Is_10ms_YES=0; F.y_actual-=step; F.x_actual=line_x(F.y_actual);
+        if(myabs(F.y_actual-RY[2])<TH){ F.x_actual=RX[2]; F.y_actual=RY[2]; F.FSTATE=F_THRID; Laser_State=ANY; } } }
+    } else if(Laser_State === THRID_X){
+      if(F.dx>0){ if(F.Is_10ms_YES===1){ F.x_actual+=step; F.y_actual=calcY(F.x_actual,F.Slope,F.Intercpet); F.Is_10ms_YES=0;
+        if(myabs(F.x_actual-RX[3])<TH){ F.y_actual=RY[3]; F.x_actual=RX[3]; F.FSTATE=F_FOURTH; Laser_State=ANY; } } }
+      else { if(F.Is_10ms_YES===1){ F.x_actual-=step; F.y_actual=calcY(F.x_actual,F.Slope,F.Intercpet); F.Is_10ms_YES=0;
+        if(myabs(F.x_actual-RX[3])<TH){ F.y_actual=RY[3]; F.x_actual=RX[3]; F.FSTATE=F_FOURTH; Laser_State=ANY; } } }
+    } else if(Laser_State === THRID_Y){
+      if(F.dy>0){ if(F.Is_10ms_YES===1){ F.Is_10ms_YES=0; F.y_actual+=step; F.x_actual=line_x(F.y_actual);
+        if(myabs(F.y_actual-RY[3])<TH){ F.x_actual=RX[3]; F.y_actual=RY[3]; F.FSTATE=F_FOURTH; Laser_State=ANY; } } }
+      else { if(F.Is_10ms_YES===1){ F.Is_10ms_YES=0; F.y_actual-=step; F.x_actual=line_x(F.y_actual);
+        if(myabs(F.y_actual-RY[3])<TH){ F.x_actual=RX[3]; F.y_actual=RY[3]; F.FSTATE=F_FOURTH; Laser_State=ANY; } } }
+    } else if(Laser_State === FOURTH_X){
+      if(F.dx>0){ if(F.Is_10ms_YES===1){ F.Is_10ms_YES=0; F.x_actual+=step; F.y_actual=calcY(F.x_actual,F.Slope,F.Intercpet);
+        if(myabs(F.x_actual-RX[0])<TH){ F.y_actual=RY[0]; F.x_actual=RX[0]; F.X_AXIS=F.x_actual; F.Y_AXIS=F.y_actual; } } }
+      else { if(F.Is_10ms_YES===1){ F.Is_10ms_YES=0; F.x_actual-=step; F.y_actual=calcY(F.x_actual,F.Slope,F.Intercpet);
+        if(myabs(F.x_actual-RX[0])<TH){ F.y_actual=RY[0]; F.x_actual=RX[0]; F.X_AXIS=F.x_actual; F.Y_AXIS=F.y_actual; } } }
+    } else if(Laser_State === FOURTH_Y){
+      if(F.dy>0){ if(F.Is_10ms_YES===1){ F.Is_10ms_YES=0; F.y_actual+=step; F.x_actual=line_x(F.y_actual);
+        if(myabs(F.y_actual-RY[0])<TH){ F.x_actual=RX[0]; F.y_actual=RY[0]; F.X_AXIS=F.x_actual; F.Y_AXIS=F.y_actual; } } }
+      else { if(F.Is_10ms_YES===1){ F.Is_10ms_YES=0; F.y_actual-=step; F.x_actual=line_x(F.y_actual);
+        if(myabs(F.y_actual-RY[0])<TH){ F.x_actual=RX[0]; F.y_actual=RY[0]; F.X_AXIS=F.x_actual; F.Y_AXIS=F.y_actual; } } }
+    }
+
+    path.push([F.x_actual, F.y_actual]);
+
+    // 完成判定：进入第四段且首次抵达起点角
+    if(doneTick < 0 && F.FSTATE === F_FOURTH &&
+       myabs(F.x_actual-RX[0]) < TH && myabs(F.y_actual-RY[0]) < TH){
+      doneTick = tick;
+    }
+  }
+  return { path, doneTick, finalF:F };
+}
+
+/* ================= 指标计算 ================= */
+function analyse(path, RX, RY, Cx, Cy){
+  const d=(a,b)=>Math.hypot(a[0]-b[0], a[1]-b[1]);
+  const c=[[RX[0],RY[0]],[RX[1],RY[1]],[RX[2],RY[2]],[RX[3],RY[3]]];
+  const sides=[d(c[0],c[1]), d(c[1],c[2]), d(c[2],c[3]), d(c[3],c[0])];
+  const diag=Math.hypot(c[0][0]-c[2][0], c[0][1]-c[2][1]);
+  const square = (Math.max(...sides)-Math.min(...sides) < 2) &&
+                 (Math.abs(diag - Math.sqrt(2)*sides[0]) < 3);
+  const aspect = Math.max(...sides)/Math.min(...sides);
+  // 覆盖：路径极值点是否贴合目标框边界
+  let xs=path.map(p=>p[0]), ys=path.map(p=>p[1]);
+  const bx=[Math.min(...RX), Math.max(...RX)], by=[Math.min(...RY), Math.max(...RY)];
+  const cover = (Math.abs(Math.min(...xs)-bx[0])<5 && Math.abs(Math.max(...xs)-bx[1])<5 &&
+                Math.abs(Math.min(...ys)-by[0])<5 && Math.abs(Math.max(...ys)-by[1])<5);
+  // 访问角点
+  const visited = c.filter(t => path.some(p=>Math.abs(p[0]-t[0])<6 && Math.abs(p[1]-t[1])<6)).length;
+  // 脱离胶带：点到边框距离 > 胶带半宽 视为脱离
+  const off = path.map(p=> distToBorder(p[0],p[1],RX,RY) > TAPE_HALF);
+  let offTotal=0, offMax=0, run=0;
+  for(let i=1;i<path.length;i++){
+    const seg=Math.hypot(path[i][0]-path[i-1][0], path[i][1]-path[i-1][1])/PX_PER_M;
+    if(off[i]){ offTotal+=seg; run+=seg; offMax=Math.max(offMax,run); } else { run=0; }
+  }
+  const roiOk = inROI(RX,RY);
+  return { sides, square, aspect, cover, visited, off, offTotal, offMax, roiOk };
+}
+
+/* ================= 画布绘制 ================= */
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const cvOver = document.getElementById('cvOver');
+const ctxOver = cvOver.getContext('2d');
+function X(px){ return px*SCALE; }
+function Y(py){ return py*SCALE; }
+
+function drawScene(RX, RY, A4Cx, A4Cy, path, upto, ideal, ref, paper, tape, roi, off, Ox, Oy){
+  ctx.clearRect(0,0,cv.width,cv.height);
+  // 背景网格
+  ctx.strokeStyle='#16202c'; ctx.lineWidth=1;
+  for(let gx=0; gx<=WIN_W; gx+=20){ ctx.beginPath(); ctx.moveTo(X(gx),0); ctx.lineTo(X(gx),Y(WIN_H)); ctx.stroke(); }
+  for(let gy=0; gy<=WIN_H; gy+=20){ ctx.beginPath(); ctx.moveTo(0,Y(gy)); ctx.lineTo(X(WIN_W),Y(gy)); ctx.stroke(); }
+
+  // A4 靶纸（纸面填充）
+  if(paper){
+    const bx0=Math.min(...RX), by0=Math.min(...RY), bx1=Math.max(...RX), by1=Math.max(...RY);
+    ctx.fillStyle='#f3ecd9'; ctx.fillRect(X(bx0),Y(by0), X(bx1-bx0), Y(by1-by0));
+    ctx.fillStyle='#b9892f'; ctx.font='12px sans-serif'; ctx.fillText('A4 靶纸 (210×297mm)', X(bx0)+4, Y(by0)+14);
+  }
+
+  // 黑胶带边框（1.8cm 宽，轨迹应贴此带）
+  if(tape){
+    ctx.strokeStyle='#3a3a3a'; ctx.lineWidth=Math.max(3, 2*TAPE_HALF*SCALE); ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(X(RX[0]),Y(RY[0])); ctx.lineTo(X(RX[1]),Y(RY[1]));
+    ctx.lineTo(X(RX[2]),Y(RY[2])); ctx.lineTo(X(RX[3]),Y(RY[3]));
+    ctx.closePath(); ctx.stroke(); ctx.lineCap='butt';
+  }
+
+  // find_rect 检测区（BUG1 已修复：整幅可检测，不再受限固定子窗口）
+  if(roi){
+    ctx.strokeStyle='rgba(22,160,133,0.85)'; ctx.setLineDash([6,4]); ctx.lineWidth=1.5;
+    ctx.strokeRect(X(ROI.x), Y(ROI.y), X(ROI.w), Y(ROI.h)); ctx.setLineDash([]);
+    ctx.fillStyle='rgba(22,160,133,0.95)'; ctx.font='11px sans-serif';
+    ctx.fillText('检测区·全幅 (BUG1已修复)', X(ROI.x)+2, Y(ROI.y)+12);
+  }
+
+  // 理想规格框（灰）
+  if(ideal){
+    ctx.strokeStyle='#b0b8c1'; ctx.setLineDash([5,4]); ctx.lineWidth=2;
+    ctx.strokeRect(X(ideal.x0), Y(ideal.y0), X(ideal.w), Y(ideal.h));
+    ctx.setLineDash([]);
+  }
+
+  // 红框参照轨迹（步长7，淡红，先于主轨迹绘制）
+  if(ref){
+    ctx.strokeStyle='rgba(224,83,61,0.35)'; ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.moveTo(X(ref.RX[0]),Y(ref.RY[0])); ctx.lineTo(X(ref.RX[1]),Y(ref.RY[1]));
+    ctx.lineTo(X(ref.RX[2]),Y(ref.RY[2])); ctx.lineTo(X(ref.RX[3]),Y(ref.RY[3]));
+    ctx.closePath(); ctx.stroke();
+    ctx.strokeStyle='rgba(224,83,61,0.55)'; ctx.lineWidth=1.5; ctx.beginPath();
+    ctx.moveTo(X(ref.path[0][0]),Y(ref.path[0][1]));
+    for(let i=1;i<ref.path.length;i++) ctx.lineTo(X(ref.path[i][0]),Y(ref.path[i][1]));
+    ctx.stroke();
+  }
+
+  // 目标方框（蓝，细线叠在胶带上）
+  ctx.strokeStyle='#2f6fed'; ctx.lineWidth=1.5;
+  ctx.beginPath();
+  ctx.moveTo(X(RX[0]),Y(RY[0])); ctx.lineTo(X(RX[1]),Y(RY[1]));
+  ctx.lineTo(X(RX[2]),Y(RY[2])); ctx.lineTo(X(RX[3]),Y(RY[3]));
+  ctx.closePath(); ctx.stroke();
+
+  // 角点
+  ctx.fillStyle='#2f6fed';
+  for(let i=0;i<4;i++){ ctx.beginPath(); ctx.arc(X(RX[i]),Y(RY[i]),4,0,7); ctx.fill(); }
+  // A4 中心（灰）
+  ctx.fillStyle='#9aa7b4';
+  ctx.beginPath(); ctx.arc(X(A4Cx),Y(A4Cy),4,0,7); ctx.fill();
+  // 起点标记（橙）：固件当前=红框中心(可能与A4中心错开，直观显示bug)
+  if(Ox!==null){
+    ctx.strokeStyle='#e08a2f'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(X(Ox)-6,Y(Oy)-6); ctx.lineTo(X(Ox)+6,Y(Oy)+6);
+    ctx.moveTo(X(Ox)+6,Y(Oy)-6); ctx.lineTo(X(Ox)-6,Y(Oy)+6); ctx.stroke();
+    ctx.fillStyle='#e08a2f'; ctx.font='11px sans-serif';
+    ctx.fillText('起点', X(Ox)+8, Y(Oy)-6);
+  }
+
+  // 轨迹（按是否在胶带上着色：绿=贴胶带，红=脱离）
+  if(upto>0){
+    ctx.lineWidth=2.2;
+    for(let i=1;i<=upto && i<path.length;i++){
+      ctx.strokeStyle = (off && off[i]) ? '#e0533d' : '#16a085';
+      ctx.beginPath();
+      ctx.moveTo(X(path[i-1][0]),Y(path[i-1][1]));
+      ctx.lineTo(X(path[i][0]),Y(path[i][1]));
+      ctx.stroke();
+    }
+    // 激光当前点
+    const cur=path[Math.min(upto,path.length-1)];
+    ctx.fillStyle='#e0533d';
+    ctx.beginPath(); ctx.arc(X(cur[0]),Y(cur[1]),5,0,7); ctx.fill();
+  }
+}
+
+/* ================= 总览图：始终含标定矩形(红大方框) + 当前目标 ================= */
+const BIG_RX=[32,208,208,32], BIG_RY=[7,7,183,183];   // 标定矩形 0.5×0.5m 固定位置
+function drawOverview(RX, RY, opts){
+  ctxOver.clearRect(0,0,cvOver.width,cvOver.height);
+  // 背景网格
+  ctxOver.strokeStyle='#16202c'; ctxOver.lineWidth=1;
+  for(let gx=0; gx<=WIN_W; gx+=20){ ctxOver.beginPath(); ctxOver.moveTo(X(gx),0); ctxOver.lineTo(X(gx),Y(WIN_H)); ctxOver.stroke(); }
+  for(let gy=0; gy<=WIN_H; gy+=20){ ctxOver.beginPath(); ctxOver.moveTo(0,Y(gy)); ctxOver.lineTo(X(WIN_W),Y(gy)); ctxOver.stroke(); }
+
+  // 标定矩形（始终显示，红框虚线，作为总览参照）
+  ctxOver.strokeStyle='rgba(224,83,61,0.9)'; ctxOver.lineWidth=2; ctxOver.setLineDash([7,4]);
+  ctxOver.beginPath();
+  ctxOver.moveTo(X(BIG_RX[0]),Y(BIG_RY[0])); ctxOver.lineTo(X(BIG_RX[1]),Y(BIG_RY[1]));
+  ctxOver.lineTo(X(BIG_RX[2]),Y(BIG_RY[2])); ctxOver.lineTo(X(BIG_RX[3]),Y(BIG_RY[3]));
+  ctxOver.closePath(); ctxOver.stroke(); ctxOver.setLineDash([]);
+  ctxOver.fillStyle='rgba(224,83,61,0.95)'; ctxOver.font='11px sans-serif';
+  ctxOver.fillText('标定矩形 0.5×0.5m', X(BIG_RX[0])+2, Y(BIG_RY[0])-4);
+  ctxOver.fillStyle='#9aa7b4'; ctxOver.beginPath(); ctxOver.arc(X(120),Y(95),4,0,7); ctxOver.fill();
+
+  // 当前目标：A4 时填纸面 + 黑胶带；否则只画蓝框
+  if(opts.isA4){
+    const bx0=Math.min(...RX), by0=Math.min(...RY), bx1=Math.max(...RX), by1=Math.max(...RY);
+    ctxOver.fillStyle='#f3ecd9'; ctxOver.fillRect(X(bx0),Y(by0), X(bx1-bx0), Y(by1-by0));
+    ctxOver.strokeStyle='#3a3a3a'; ctxOver.lineWidth=Math.max(3, 2*TAPE_HALF*SCALE); ctxOver.lineCap='round';
+    ctxOver.beginPath();
+    ctxOver.moveTo(X(RX[0]),Y(RY[0])); ctxOver.lineTo(X(RX[1]),Y(RY[1]));
+    ctxOver.lineTo(X(RX[2]),Y(RY[2])); ctxOver.lineTo(X(RX[3]),Y(RY[3]));
+    ctxOver.closePath(); ctxOver.stroke(); ctxOver.lineCap='butt';
+    ctxOver.fillStyle='#b9892f'; ctxOver.font='11px sans-serif';
+    ctxOver.fillText('A4 靶纸', X(bx0)+4, Y(by0)+14);
+  }
+
+  // 目标方框（蓝，叠在上方）
+  ctxOver.strokeStyle='#2f6fed'; ctxOver.lineWidth=1.5;
+  ctxOver.beginPath();
+  ctxOver.moveTo(X(RX[0]),Y(RY[0])); ctxOver.lineTo(X(RX[1]),Y(RY[1]));
+  ctxOver.lineTo(X(RX[2]),Y(RY[2])); ctxOver.lineTo(X(RX[3]),Y(RY[3]));
+  ctxOver.closePath(); ctxOver.stroke();
+  ctxOver.fillStyle='#2f6fed';
+  for(let i=0;i<4;i++){ ctxOver.beginPath(); ctxOver.arc(X(RX[i]),Y(RY[i]),4,0,7); ctxOver.fill(); }
+
+  // 已走轨迹（按是否贴胶带着色）+ 激光当前点
+  if(opts.path && opts.upto>0){
+    ctxOver.lineWidth=2;
+    for(let i=1;i<=opts.upto && i<opts.path.length;i++){
+      ctxOver.strokeStyle = (opts.off && opts.off[i]) ? '#e0533d' : '#16a085';
+      ctxOver.beginPath();
+      ctxOver.moveTo(X(opts.path[i-1][0]),Y(opts.path[i-1][1]));
+      ctxOver.lineTo(X(opts.path[i][0]),Y(opts.path[i][1]));
+      ctxOver.stroke();
+    }
+    const cur=opts.path[Math.min(opts.upto,opts.path.length-1)];
+    ctxOver.fillStyle='#e0533d'; ctxOver.beginPath(); ctxOver.arc(X(cur[0]),Y(cur[1]),5,0,7); ctxOver.fill();
+  }
+
+  // 起点标记
+  if(opts.Ox!==null && opts.Ox!==undefined){
+    ctxOver.strokeStyle='#e08a2f'; ctxOver.lineWidth=2;
+    ctxOver.beginPath();
+    ctxOver.moveTo(X(opts.Ox)-6,Y(opts.Oy)-6); ctxOver.lineTo(X(opts.Ox)+6,Y(opts.Oy)+6);
+    ctxOver.moveTo(X(opts.Ox)+6,Y(opts.Oy)-6); ctxOver.lineTo(X(opts.Ox)-6,Y(opts.Oy)+6);
+    ctxOver.stroke();
+  }
+}
+
+/* ================= 交互逻辑 ================= */
+const $ = id=>document.getElementById(id);
+let state = null;            // {RX,RY,Cx,Cy,step,bug,result,idx,playing,timer,ideal}
+let idealBox = {x0:32,y0:7,w:176,h:176};
+
+function readInputs(){
+  return {
+    RX:[+$('c0x').value,+$('c1x').value,+$('c2x').value,+$('c3x').value],
+    RY:[+$('c0y').value,+$('c1y').value,+$('c2y').value,+$('c3y').value],
+    Cx:+$('cx').value, Cy:+$('cy').value,
+    step:+$('stepNum').value,
+    bug:$('bugMode').checked,
+    overlay:$('overlay').checked,
+    preset:$('preset').value,
+    startMode:$('startMode').value,
+    showROI:$('showROI').checked
+  };
+}
+
+function rebuild(){
+  const inp = readInputs();
+  const isA4 = (inp.preset==='a4' || inp.preset==='a4pos' || inp.preset==='a4roi');
+  const isScreen = (inp.preset==='screen');   // 屏幕边框误检演示
+  // 当前方框自身中心（大方框=四角平均；A4=四角平均，即 A4 中心）
+  const A4Cx = (inp.RX[0]+inp.RX[1]+inp.RX[2]+inp.RX[3])/4;
+  const A4Cy = (inp.RY[0]+inp.RY[1]+inp.RY[2]+inp.RY[3])/4;
+  // A4 检测滤波（镜像固件 is_a4_target）：非 A4 目标（屏幕边框/长宽比不符）→ 检测失败
+  const a4pass = isA4Target(inp.RX, inp.RY);
+  // 起点（智能自动取“本框中心”；可选“角点起步”或“沿用标定矩形中心=固件bug”）
+  // 注：'calib' 分支仅复现【修复前 BUG2】，纯对照演示，不代表当前固件（见上方 calib 说明块）。
+  let Ox=A4Cx, Oy=A4Cy;
+  if(inp.startMode==='calib'){ Ox=RED_CAL.x; Oy=RED_CAL.y; }   // [calib 演示] 起点=红框标定中心(非 A4 中心) → 复现旧 BUG2 跑偏
+  else if(inp.startMode==='corner'){ Ox=inp.RX[0]; Oy=inp.RY[0]; }
+  const startAtCorner = (inp.startMode==='corner');
+
+  // 若本应识别 A4（A4 预设或屏幕误检演示）却未通过 A4 滤波 → 检测失败，不跑轨迹
+  const detectFail = (isA4 || isScreen) && !a4pass;
+  let res, a;
+  if(detectFail){
+    res = { path:[], doneTick:-1 };
+    a = { sides:[], square:false, aspect:rectAspect(inp.RX,inp.RY), cover:false,
+          visited:0, off:[], offTotal:0, offMax:0, roiOk:inROI(inp.RX,inp.RY), a4pass:false };
+  } else {
+    // 按目标类型调用对应仿真控制器（与固件函数一一对应）
+    if(isA4 && inp.startMode==='calib'){
+      // [calib 演示] 旧 BUG2：黑框错借红框标定中心(120,95)作起点，复现“红框控制器” Motion_TarCtrl_Sim
+      res = Motion_TarCtrl_Sim(inp.RX, inp.RY, RED_CAL.x, RED_CAL.y, inp.step, inp.bug, 6000);
+    } else if(isA4){
+      // 当前固件：A4 黑框 Motion_TarCtrl_Black，起点取本框中心(F_CENTRY 内部算 bx_c/by_c)或角点起步
+      res = Motion_TarCtrl_Black_Sim(inp.RX, inp.RY, inp.step, startAtCorner, inp.bug, 6000);
+    } else {
+      // 红大方框：Motion_TarCtrl，起点=红框标定中心(120,95)
+      res = Motion_TarCtrl_Sim(inp.RX, inp.RY, 120, 95, inp.step, false, 6000);
+    }
+    a = analyse(res.path, inp.RX, inp.RY, A4Cx, A4Cy);
+  }
+  a.a4pass = a4pass;
+  state = { ...inp, result:res, idx:0, playing:false, timer:null };
+  state.analysis = a;                 // 关键修复：保存 analyse 结果，供播放/单步时读取（此前缺失导致播放抛错）
+  state.paper = isA4 && !detectFail;
+  state.tape = isA4 && !detectFail;
+  state.roi  = (isA4 && !detectFail && inp.showROI);
+  state.A4Cx = A4Cx; state.A4Cy = A4Cy;
+  state.Ox = Ox; state.Oy = Oy;
+  // 标定矩形参照轨迹（步长7，大方框）—— 用于对比
+  state.ref = null;
+  if(inp.overlay && !detectFail){
+    const rRX=[32,208,208,32], rRY=[7,7,183,183];
+    const rr = Motion_TarCtrl_Sim(rRX, rRY, 120, 95, 7, false, 6000);
+    state.ref = { RX:rRX, RY:rRY, path:rr.path };
+  }
+  updateMetrics(0, a, inp);
+  drawScene(inp.RX, inp.RY, A4Cx, A4Cy, res.path, 0, null, state.ref,
+            state.paper, state.tape, state.roi, a.off, detectFail?null:Ox, detectFail?null:Oy);
+  drawOverview(inp.RX, inp.RY, { isA4:isA4 && !detectFail, path:res.path, upto:0,
+            off:a.off, Ox:detectFail?null:Ox, Oy:detectFail?null:Oy });
+  if(detectFail){
+    ctx.fillStyle='rgba(224,83,61,0.92)'; ctx.font='bold 13px sans-serif';
+    ctx.fillText('✗ 检测失败：识别到的是屏幕边框 / 非 A4 目标', 12, 20);
+    ctx.font='12px sans-serif';
+    ctx.fillText('已按 A4 长宽比(1.414±0.18)+面积占比(<55%) 滤波排除，不发送角点', 12, 37);
+  }
+}
+
+function updateMetrics(upto, a, inp){
+  const isA4 = (inp.preset==='a4'||inp.preset==='a4pos'||inp.preset==='a4roi');
+  const isScreen = (inp.preset==='screen');
+  // A4 检测滤波失败（屏幕边框误检 / 非 A4）→ 检测失败，不发送角点（镜像固件 is_a4_target）
+  if((isA4||isScreen) && !a.a4pass){
+    $('mState').textContent='检测失败';
+    $('mSquare').textContent='非A4目标'; $('mSquare').className='v bad';
+    $('mCover').textContent='—'; $('mCover').className='v';
+    $('mCorners').textContent='—'; $('mCorners').className='v';
+    $('mDone').textContent='不发送角点'; $('mDone').className='v bad';
+    setCls($('mA4filter'), false, '', '非A4 ✗ 已过滤');
+    $('mOff').textContent='—'; $('mOff').className='v';
+    if(isA4){ setCls($('mROI'), a.roiOk, '全幅可检测 ✓', '超出检测区 ✗'); }
+    else { $('mROI').textContent='—'; $('mROI').className='v'; }
+    $('mStep').textContent='黑框·A4靶纸（误检屏幕边框→已滤波排除）';
+    return;
+  }
+
+  const done = (state.result.doneTick>=0) ? state.result.doneTick : upto;
+  $('mState').textContent = `tick ${upto}`;
+  $('mTime').textContent = (done*10/1000).toFixed(2) + ' s' + (state.result.doneTick<0 ? ' (未达终点)' : '');
+  $('mSides').textContent = a.sides.map(s=>(s.toFixed(0)+' / '+(s/PX_PER_M).toFixed(2))).join(' · ');
+  // 形状：A4 看长:宽是否≈1.414；标定矩形看是否正方
+  if(isA4){
+    const aok = Math.abs(a.aspect-1.414) < 0.08;
+    setCls($('mSquare'), aok, `矩形 ${a.aspect.toFixed(2)}:1 ✓`, `比例异常 ${a.aspect.toFixed(2)}:1`);
+  } else {
+    setCls($('mSquare'), a.square, '正方 ✓', '非正方 ✗');
+  }
+  setCls($('mCover'), a.cover, '贴合 ✓', '未贴合 ✗');
+  $('mCorners').textContent = a.visited + ' / 4';
+  setCls($('mDone'), state.result.doneTick>=0, '已完成 ✓', '未完成 ✗');
+  // 脱离胶带（仅 A4 预设有意义）
+  if(isA4 && a.off){
+    const totCm=(a.offTotal*100).toFixed(1), maxCm=(a.offMax*100).toFixed(1);
+    if(a.offMax <= 1e-6){ setCls($('mOff'), true, `全程贴胶带 ✓`, ''); }
+    else if(a.offMax > 0.05){ setCls($('mOff'), false, `最大连续${maxCm}cm → 0分风险`, ''); }
+    else { setCls($('mOff'), false, `累计${totCm}cm·最大${maxCm}cm → 至少-2`, ''); }
+  } else { $('mOff').textContent='—'; $('mOff').className='v'; }
+  // 检测 ROI（仅 A4 预设有意义）
+  if(isA4){
+    setCls($('mROI'), a.roiOk, '全幅可检测 ✓', '超出检测区 ✗');
+  } else { $('mROI').textContent='—'; $('mROI').className='v'; }
+  const over = inp.step > 8 ? ' ⚠ 步长>2×容差(8) 易过冲' : '';
+  const pname = isA4 ? '黑框·A4靶纸' :
+                inp.preset==='big' ? '标定矩形(Motion_TarCtrl)' : '过冲演示';
+  $('mStep').textContent = `步长 ${inp.step}px · ${pname} · ${inp.bug?'含旧bug':'已修复'}${over}`;
+  // A4 检测滤波（镜像固件 is_a4_target）：A4 目标→已识别；否则→已过滤
+  if(isA4 || isScreen){
+    setCls($('mA4filter'), a.a4pass, 'A4 目标 ✓ 已识别', '非A4 ✗ 已过滤');
+  } else { $('mA4filter').textContent='—'; $('mA4filter').className='v'; }
+}
+function setCls(el, ok, yes, no){
+  el.textContent = ok?yes:no;
+  el.className = 'v ' + (ok?'ok':'bad');
+}
+
+/* 播放循环 */
+function tickOnce(){
+  if(!state) return;
+  if(state.idx < state.result.path.length-1){
+    state.idx++;
+    drawScene(state.RX, state.RY, state.A4Cx, state.A4Cy, state.result.path, state.idx,
+              idealBox, state.ref, state.paper, state.tape, state.roi, state.analysis.off, state.Ox, state.Oy);
+    drawOverview(state.RX, state.RY, { isA4:state.paper, path:state.result.path, upto:state.idx,
+              off:state.analysis.off, Ox:state.Ox, Oy:state.Oy });
+    updateMetrics(state.idx, state.analysis, state);
+  } else {
+    pause();
+  }
+}
+function play(){
+  if(!state) rebuild();
+  if(state.idx >= state.result.path.length-1) state.idx = 0;
+  state.playing = true; $('play').textContent='⏸ 暂停';
+  const sp = +$('speed').value;
+  const loop = ()=>{
+    if(!state.playing) return;
+    tickOnce();
+    if(state.idx < state.result.path.length-1){
+      if(sp===0){ requestAnimationFrame(loop); } else { state.timer=setTimeout(loop, sp); }
+    } else { pause(); }
+  };
+  loop();
+}
+function pause(){
+  state.playing=false; $('play').textContent='▶ 播放';
+  if(state.timer){ clearTimeout(state.timer); state.timer=null; }
+}
+
+/* 事件绑定 */
+$('play').onclick = ()=> state && state.playing ? pause() : play();
+$('step').onclick = ()=>{ pause(); tickOnce(); };
+$('reset').onclick = ()=>{ pause(); rebuild(); };
+$('speed').oninput = ()=>{};
+function syncStep(v){ $('stepNum').value=v; $('stepRange').value=v; $('stepLabel').textContent=v; }
+$('stepRange').oninput = e=> syncStep(+e.target.value);
+$('stepNum').oninput = e=>{ let v=+e.target.value; if(v<1)v=1; if(v>40)v=40; syncStep(v); };
+$('bugMode').onchange = ()=> rebuild();
+$('overlay').onchange = ()=> rebuild();
+$('preset').onchange = e=>{
+  if(e.target.value==='big'){
+    // 标定矩形：0.5m×0.5m 正方（Motion_TarCtrl 任务），步进 7
+    setCorners(32,7,208,7,208,183,32,183,120,95); syncStep(7);
+  } else if(e.target.value==='a4'){
+    // A4 靶纸·标准位：210×297mm → 74×105px（比例1.42），居中(120,95)，步进1
+    setCorners(83,43,157,43,157,148,83,148,120,95); syncStep(1);
+  } else if(e.target.value==='a4pos'){
+    // A4 靶纸·任意位置：同尺寸移位到(165,120)，整幅可检测；中心≠标定矩形中心(120,95)
+    setCorners(128,68,202,68,202,173,128,173,165,120); syncStep(1);
+  } else if(e.target.value==='a4roi'){
+    // A4 靶纸·贴边缘：左上角(23,3) 在旧 ROI(44,35,…) 之外会检测失败；BUG1 修复后整幅可检测
+    setCorners(23,3,97,3,97,108,23,108,60,55); syncStep(1);
+  } else if(e.target.value==='overshoot'){
+    // 步长过大演示：标定矩形 + 步长24（>2×容差8）→ 过冲/无法完成
+    setCorners(32,7,208,7,208,183,32,183,120,95); syncStep(24);
+  } else if(e.target.value==='screen'){
+    // 屏幕边框误检演示：占满画面、4:3 的大矩形（模仿投影/LED 屏幕外框）。
+    // 固件 is_a4_target 会因“面积占比>0.55”且“长宽比≠1.414”将其排除，避免误检。
+    setCorners(5,5,235,5,235,186,5,186,120,95); syncStep(1);
+  }
+  rebuild();
+};
+$('startMode').onchange = ()=> rebuild();
+$('showROI').onchange = ()=> rebuild();
+function setCorners(a,b,c,d,e,f,g,h,i,j){
+  $('c0x').value=a;$('c0y').value=b;$('c1x').value=c;$('c1y').value=d;
+  $('c2x').value=e;$('c2y').value=f;$('c3x').value=g;$('c3y').value=h;
+  $('cx').value=i;$('cy').value=j;
+}
+// 高级坐标改动后需手动重置
+['c0x','c0y','c1x','c1y','c2x','c2y','c3x','c3y','cx','cy'].forEach(id=>{
+  $(id).onchange = ()=> rebuild();
+});
+
+/* 初始化 */
+rebuild();
+</script>
+</body>
+</html>

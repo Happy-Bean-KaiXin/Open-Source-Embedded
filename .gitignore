@@ -1,0 +1,45 @@
+# ============================================================
+# Open-Source-Embedded  .gitignore
+# ============================================================
+
+# --- WorkBuddy workspace (local, not for sharing) ---
+.workbuddy/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# --- STM32 / Keil MDK build artifacts ---
+MDK-ARM/*/*.o
+MDK-ARM/*/*.d
+MDK-ARM/*/*.axf
+MDK-ARM/*/*.hex
+MDK-ARM/*/*.map
+MDK-ARM/*/*.htm
+MDK-ARM/*/*.build_log.htm
+MDK-ARM/*/*.dep
+MDK-ARM/*/*.uvguix.*
+MDK-ARM/*/*.uvoptx
+MDK-ARM/RTE/
+
+# --- CubeMX / IDE project user files ---
+*.mxproject
+*.ioc
+
+# --- OS / Editor ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# --- PDF (usually generated from other sources) ---
+*.pdf
+
+# --- Sim output images (regenerable from scripts) ---
+# Keep PNGs in sim/ - they are analysis products worth tracking
