@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-gen_large_figs.py  ——  大样本实测「选轴规则」可行性
+gen_large_figs.py  ——  大样本实测「选轴规则」可行性  (v2: 防豆腐块 + 目的横幅 + 详细解释)
 ================================================================================
 复刻固件算术 (User/contorl/contorl.c 的 calculateSlope/Intercept/Y/X):
     - 32 位 float 斜率:  用 struct 打包/解包模拟 C 的 float (f32)
@@ -29,15 +29,14 @@ import random
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.font_manager import FontProperties
+
+import analysis_utils as au          # [v2] 公共工具: 字体 / 横幅 / 解释区
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = HERE
 
-# ---------- 中文字体 (SimHei .ttf 直接加载, 杜绝豆腐块) ----------
-_FONT = FontProperties(fname=r"C:\Windows\Fonts\simhei.ttf")
-plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei"]
-plt.rcParams["axes.unicode_minus"] = False
+# ---------- 中文字体 (自动探测 fallback, 杜绝豆腐块) ----------
+au.setup_chinese_font()
 
 # ---------- 固件常量 ----------
 BIG_FRAME_STEP = 7
@@ -260,25 +259,12 @@ def analyze():
 
 
 # ============================================================================
-# 绘图辅助
+# 绘图 (v2: 每张图顶部加「本图目的」横幅, 解释区自动换行防重叠)
 # ============================================================================
-def draw_explanation(fig, text_lines, y0=0.02, fs=8.0, lh=0.022):
-    """在图底部画一段紧凑解释文字。"""
-    ax = fig.add_axes([0, y0, 1, 0.30])
-    ax.axis("off")
-    y = 1.0
-    for line in text_lines:
-        weight = "bold" if line.startswith("##") else "normal"
-        txt = line.lstrip("#")
-        ax.text(0.02, y, txt, transform=ax.transAxes, va="top", ha="left",
-                 fontsize=fs, fontproperties=_FONT, color="#222",
-                 fontweight=weight)
-        y -= lh
-
-
 def fig_perstep_dev(rows):
     fig = plt.figure(figsize=(11, 9))
-    ax = fig.add_axes([0.10, 0.52, 0.85, 0.38])
+    # 主图区 (避开顶部横幅)
+    ax = fig.add_axes([0.10, 0.50, 0.85, 0.36])
     xs_x, ys_x, xs_y, ys_y = [], [], [], []
     for r in rows:
         if r["drive_rule"] == "X":
@@ -288,30 +274,43 @@ def fig_perstep_dev(rows):
     ax.scatter(xs_x, ys_x, s=14, c="#1f77b4", alpha=0.7, label="规则驱动 X 轴 (|dx|>=|dy|)")
     ax.scatter(xs_y, ys_y, s=14, c="#ff7f0e", alpha=0.7, label="规则驱动 Y 轴 (|dy|>|dx|)")
     ax.set_xscale("log")
-    ax.set_xlabel("ratio = |dx| / |dy|  (线段胖瘦比, 对数刻度)", fontproperties=_FONT)
-    ax.set_ylabel("每步最大垂距 (px)", fontproperties=_FONT)
-    ax.set_title("图1  每步垂距: 实际轨迹 vs 理想直线 (规则选轴, 全部 172 条)",
-                 fontproperties=_FONT)
-    ax.legend(loc="upper right", prop=_FONT, fontsize=8)
+    ax.set_xlabel("ratio = |dx| / |dy|  (线段胖瘦比, 对数刻度)")
+    ax.set_ylabel("每步最大垂距 (px)")
+    ax.set_title("图1  每步垂距: 实际轨迹 vs 理想直线 (规则选轴, 全部 172 条)")
+    ax.legend(loc="upper right", fontsize=8)
     ax.grid(True, alpha=0.3)
     ax.text(0.98, 0.95, "竖边 dx=0 用 if(dx!=0) 守卫保持 x 常量",
             transform=ax.transAxes, ha="right", va="top",
-            fontsize=7.5, fontproperties=_FONT, color="#666")
-    draw_explanation(fig, [
-        "## 这张图在模拟什么",
-        "舵机沿每条边逐步跳进(每步7px), 从轴坐标由 calcY/calcX 推导。",
-        "每步实际落点相对「理想直线 S->E」的垂距 = 偏离量。垂距越小, 轨迹越贴线。",
-        "## 结论",
-        "无论驱动 X 还是 Y, 每步垂距最大仅约 2px (X驱动<=1.98, Y驱动<=1.28), 平均<1px。",
-        "说明「从轴每步重算」让轨迹始终贴着理想直线走, 误差不累积。",
-    ])
+            fontsize=7.5, color="#666")
+
+    au.add_banner(fig, "图1  每步垂距散点图",
+                  "检验“从轴每步重算”机制下, 轨迹偏离理想直线的程度 —— 垂距越小轨迹越贴线")
+    au.add_explanation(fig, [
+        ("【这张图在模拟什么】", True),
+        "对全部 172 条线段(12 手工 + 160 随机), 逐条模拟舵机“每步跳 7px、"
+        "进入目标 ±4px 死区即停”的运动。每步实际落点与“起点→终点理想直线”的",
+        "垂直距离(垂距) = 该步的偏离量。图上每个点 = 一条线段全程中最大的一次垂距。",
+        ("【怎么读】", True),
+        "· 横轴 ratio=|dx|/|dy|(线段胖瘦比), 对数刻度把横线(ratio大)到竖线(ratio小)全部铺开;",
+        "· 蓝点 = 规则驱动 X 轴(|dx|>=|dy|)的线段, 橙点 = 规则驱动 Y 轴的线段;",
+        "· 点越低, 说明这条线走起来越贴理想直线, 误差越小。",
+        ("【关键结论】", True),
+        "· 所有点都不超过 2px(X 驱动 max≈1.98px, Y 驱动 max≈1.28px), 平均 <1px;",
+        "· 对应物理尺寸: 2px ≈ 5.7mm —— 对 A4 纸面激光画线完全可接受;",
+        "· 垂距小且不随 ratio 增长 = 误差不累积, 是“从轴每步重算”带来的核心收益。",
+        ("【为什么垂距这么小?】", True),
+        "驱动轴每步固定走 7px, 但从轴坐标不是“每步自己走”, 而是每步用斜率公式实时算出, "
+        "所以从轴永远落在理想直线上, 偏差仅来自 float32 舍入 + int 截断(约 1px 内)。",
+    ], y0=0.02, h=0.42, title="详细说明", fs=8.2)
+    au.add_footer(fig, "gen_large_figs.py")
     fig.savefig(os.path.join(OUT, "fig1_perstep_dev.png"), dpi=150, bbox_inches="tight")
     plt.close(fig)
+    print("[OK] fig1_perstep_dev.png")
 
 
 def fig_endpoint_err(rows):
     fig = plt.figure(figsize=(11, 9))
-    ax = fig.add_axes([0.10, 0.52, 0.85, 0.38])
+    ax = fig.add_axes([0.10, 0.50, 0.85, 0.36])
     xs_r, ys_r, xs_w, ys_w = [], [], [], []
     for r in rows:
         if r["wrong_na"]:
@@ -322,27 +321,37 @@ def fig_endpoint_err(rows):
     ax.scatter(xs_w, ys_w, s=16, c="#ff7f0e", alpha=0.5, label="错选轴 终点误差")
     ax.set_xscale("log")
     ax.set_yscale("log")
-    ax.set_xlabel("ratio = |dx| / |dy|  (线段胖瘦比, 对数刻度)", fontproperties=_FONT)
-    ax.set_ylabel("终点误差 (px, 对数刻度)", fontproperties=_FONT)
-    ax.set_title("图2  终点误差: 规则选轴 vs 错选轴 (核心可行性证据)",
-                 fontproperties=_FONT)
+    ax.set_xlabel("ratio = |dx| / |dy|  (线段胖瘦比, 对数刻度)")
+    ax.set_ylabel("终点误差 (px, 对数刻度)")
+    ax.set_title("图2  终点误差: 规则选轴 vs 错选轴 (核心可行性证据)")
     ax.axvline(1.0, color="k", ls="--", lw=1)
     ax.text(1.02, 0.05, "ratio=1\n(正对角)", transform=ax.transData,
-            fontsize=7.5, fontproperties=_FONT, color="#333")
-    ax.legend(loc="upper right", prop=_FONT, fontsize=8)
+            fontsize=7.5, color="#333")
+    ax.legend(loc="upper right", fontsize=8)
     ax.grid(True, alpha=0.3, which="both")
-    draw_explanation(fig, [
-        "## 这张图在模拟什么",
-        "终点误差 = 实际停点 P' 到目标点 E 的直线距离。蓝=按规则选轴, 橙=故意反着选。",
-        "## 三条规律",
-        "1) 蓝线全程贴底(大部分<5px): 规则选轴时终点误差始终很小且有界。",
-        "2) 橙线在 ratio 极端处爆炸(可达数百 px): 错轴时死区落小轴, 从轴误差被斜率放大。",
-        "3) ratio=1(正对角)处蓝橙重合: 两轴对称, 选谁都一样。",
-        "## 工程结论",
-        "规则 |dx|>=|dy|->驱动X 在全部区间都是最优或至少不劣; 极端倾斜处错轴代价巨大, 必须按规则。",
-    ])
+
+    au.add_banner(fig, "图2  终点误差对比(本目录核心证据图)",
+                  "量化“按规则选轴”与“故意错选轴”的终点误差差距 —— 证明选轴规则是精度的根本保障")
+    au.add_explanation(fig, [
+        ("【这张图在模拟什么】", True),
+        "同样的 172 条线段, 每条都跑两遍: 一遍按规则选轴(蓝点), 一遍故意反着选轴(橙点)。",
+        "终点误差 = 实际停点 P' 到目标点 E 的直线距离(px)。",
+        ("【怎么读】", True),
+        "· 蓝点全程压在底部(大部分 1~5px) = 规则选轴时终点误差始终很小且有界;",
+        "· 橙点在 ratio 极端处(很横或很竖)爆炸到 100+px = 错选轴代价巨大;",
+        "· ratio=1(正对角)处蓝橙重合 = 两轴对称, 选谁都一样。",
+        ("【三条规律】", True),
+        "1) 规则选轴: 误差有界, 理论上界 = DEADZONE×√2 ≈ 5.66px, 实测最大仅 5.0px;",
+        "2) 错选轴:   误差 ≈ DEADZONE × max(ratio, 1/ratio), 极端斜率下被放大几十倍;",
+        "3) ratio=1:  驱动哪根轴效果相同(对称平局, 规则也选不出更优)。",
+        ("【工程结论】", True),
+        "规则 |dx|>=|dy|→驱动X 在全部斜率区间都是最优或至少不劣;",
+        "极端倾斜处(ratio>3 或 <0.3)错轴代价巨大(可达 460mm), 必须按规则走。",
+    ], y0=0.02, h=0.42, title="详细说明", fs=8.2)
+    au.add_footer(fig, "gen_large_figs.py")
     fig.savefig(os.path.join(OUT, "fig2_endpoint_err.png"), dpi=150, bbox_inches="tight")
     plt.close(fig)
+    print("[OK] fig2_endpoint_err.png")
 
 
 def fig_examples(rows):
@@ -350,9 +359,10 @@ def fig_examples(rows):
     # 找一条浅线 + 一条陡线
     shallow = next(r for r in rows if r["dx"] == 120 and r["dy"] == 30)
     steep = next(r for r in rows if r["dx"] == 30 and r["dy"] == 120)
-    specs = [("浅线 dx=120,dy=30", shallow), ("陡线 dx=30,dy=120", steep)]
-    axes = [fig.add_axes([0.08, 0.55, 0.40, 0.34]),
-            fig.add_axes([0.56, 0.55, 0.40, 0.34])]
+    specs = [("浅线 dx=120,dy=30 (ratio=4, 规则驱动X)", shallow),
+             ("陡线 dx=30,dy=120 (ratio=0.25, 规则驱动Y)", steep)]
+    axes = [fig.add_axes([0.08, 0.56, 0.40, 0.30]),
+            fig.add_axes([0.56, 0.56, 0.40, 0.30])]
     for ax, (title, r) in zip(axes, specs):
         S = (r["x1"], r["y1"]); E = (r["x2"], r["y2"])
         drive_rule = r["drive_rule"]; drive_wrong = "Y" if drive_rule == "X" else "X"
@@ -367,29 +377,42 @@ def fig_examples(rows):
         ax.plot(pxw, pyw, "-s", c="#ff7f0e", ms=3, lw=1, label="错选轴路径")
         ax.scatter([S[0]], [S[1]], c="k", zorder=5)
         ax.scatter([E[0]], [E[1]], c="r", zorder=5)
-        ax.set_title(title, fontproperties=_FONT)
-        ax.set_xlabel("X (px)", fontproperties=_FONT)
-        ax.set_ylabel("Y (px)", fontproperties=_FONT)
-        ax.legend(loc="upper right", prop=_FONT, fontsize=7)
+        ax.set_title(title, fontsize=9.5)
+        ax.set_xlabel("X (px)")
+        ax.set_ylabel("Y (px)")
+        ax.legend(loc="upper right", fontsize=7)
         ax.grid(True, alpha=0.3)
-        ax.text(0.02, 0.02, "规则终误=%.2fpx\n错轴终误=%.2fpx" % (
+        ax.text(0.02, 0.02, "规则终误=%.2fpx\n错选终误=%.2fpx" % (
             rr["endpoint_err"], rw["endpoint_err"]),
-            transform=ax.transAxes, fontsize=7.5, fontproperties=_FONT,
+            transform=ax.transAxes, fontsize=7.5,
             bbox=dict(boxstyle="round", fc="#fff", ec="#ccc"))
-    draw_explanation(fig, [
-        "## 这张图在模拟什么",
-        "左=浅线(本该驱动X), 右=陡线(本该驱动Y)。绿线=理想直线, 蓝=规则驱动阶梯路径, 橙=错选轴路径。",
-        "## 看得到的现象",
-        "规则驱动(蓝)始终贴着绿线, 最终红点(目标)近在咫尺; 错选轴(橙)在陡线/浅线上大幅偏离绿线。",
-        "这直观解释了图2: 错轴之所以误差爆炸, 是因为让「小跨度轴」当驱动轴, 从轴被斜率放大。",
-    ])
+
+    au.add_banner(fig, "图3  浅线 / 陡线 轨迹叠加对比",
+                  "把规则驱动与错选轴的“实际阶梯路径”画在同一张图上, 直观展示错选为什么会炸")
+    au.add_explanation(fig, [
+        ("【这张图在模拟什么】", True),
+        "挑两条典型线段, 同图对比三种路径: 绿=理想直线 S→E, 蓝=按规则选轴的实际落点, "
+        "橙=故意错选轴的实际落点。左=浅线(该驱动X), 右=陡线(该驱动Y)。",
+        ("【怎么读】", True),
+        "· 蓝色阶梯几乎贴在绿线上 → 按规则走, 轨迹准, 终点(红星)近在咫尺;",
+        "· 橙色阶梯大幅偏离绿线 → 错选轴, 终点误差爆炸(白框内的数值);",
+        "· 黑圆=起点 S, 红星=目标 E; 每个子图左下白框显示两条路径的终点误差。",
+        ("【为什么错轴会偏?】", True),
+        "错选轴 = 让“跨度小”的轴当驱动轴: 死区落在小轴上提前停, 而从轴是“跨度大”的轴, "
+        "从轴误差 = 死区误差 × 大斜率, 被放大数倍到数十倍。",
+        "例: 浅线 ratio=4, 错选驱动 Y 时 X 是跨度大的轴, 误差上界 = 4px × 4 = 16px。",
+        ("【结论】", True),
+        "轨迹准不准, 选轴规则说了算: 驱动大轴 → 有效斜率≤1 → 从轴误差不被放大。",
+    ], y0=0.02, h=0.42, title="详细说明", fs=8.2)
+    au.add_footer(fig, "gen_large_figs.py")
     fig.savefig(os.path.join(OUT, "fig3_examples.png"), dpi=150, bbox_inches="tight")
     plt.close(fig)
+    print("[OK] fig3_examples.png")
 
 
 def fig_feasibility(rows):
     fig = plt.figure(figsize=(11, 9))
-    ax = fig.add_axes([0.12, 0.52, 0.80, 0.38])
+    ax = fig.add_axes([0.12, 0.50, 0.80, 0.36])
     # 统计
     rule_errs = [r["endpoint_rule"] for r in rows]
     wrong_errs = [r["endpoint_wrong"] for r in rows if not r["wrong_na"]]
@@ -404,24 +427,34 @@ def fig_feasibility(rows):
     bars = ax.bar(labels, vals, color=colors)
     for b, v in zip(bars, vals):
         ax.text(b.get_x() + b.get_width() / 2, v + max(vals) * 0.02,
-                "%.2f px" % v, ha="center", fontsize=9, fontproperties=_FONT)
-    ax.set_ylabel("误差 (px)", fontproperties=_FONT)
-    ax.set_title("图4  误差上界汇总 (px)  与 1px≈2.84mm 换算", fontproperties=_FONT)
+                "%.2f px" % v, ha="center", fontsize=9)
+    ax.set_ylabel("误差 (px)")
+    ax.set_title("图4  误差上界汇总 (px)  与 1px≈2.84mm 换算")
     ax.grid(True, axis="y", alpha=0.3)
-    draw_explanation(fig, [
-        "## 这张图在模拟什么",
-        "把 172 条线段的统计极值汇总成柱状图, 直观对比「规则」与「错轴」的代价。",
-        "## 关键数字 (与原始大样本结论一致)",
-        "规则选轴: 终点误差最大 %.2f px (≈%.1f mm), 平均 %.2f px; 每步垂距最大 %.2f px。" % (
-            rule_max, rule_max * 1000.0 / PX_PER_M, rule_avg, perp_max),
-        "错选轴:   终点误差最大 %.1f px (≈%.0f mm) —— 极端斜率下爆炸。" % (
-            wrong_max, wrong_max * 1000.0 / PX_PER_M),
-        "## 可行性判定",
-        "规则 |dx|>=|dy|->驱动X 可行且必要: 轨迹贴线(<=2px)+终点有界收敛(<=~5.7px)+避开竖边除零;",
-        "错轴虽「线也对」但终点大幅偏离。中等斜率(ratio~1.5)代价仅亚 px 级, 选错不致命但规则仍略优。",
-    ])
+
+    au.add_banner(fig, "图4  误差上界汇总(可行性判定图)",
+                  "把 172 条线段的极值统计压成 4 根柱子, 一图看完规则与错选的数量级差距")
+    au.add_explanation(fig, [
+        ("【这张图在模拟什么】", True),
+        "把 172 条线段的统计极值汇总成柱状图, 直观对比「按规则选轴」与「故意错选轴」的代价。",
+        ("【4 根柱子的含义】", True),
+        "· 蓝1 规则终点误差 max = %.2fpx ≈ %.1fmm —— 最坏情况下偏离目标多远;"
+        % (rule_max, rule_max * 1000.0 / PX_PER_M),
+        "· 蓝2 规则终点误差 avg = %.2fpx ≈ %.1fmm —— 平均情况;"
+        % (rule_avg, rule_avg * 1000.0 / PX_PER_M),
+        "· 橙  错选终点误差 max = %.1fpx ≈ %.0fmm —— 故意选错轴的代价(极端斜率下爆炸);"
+        % (wrong_max, wrong_max * 1000.0 / PX_PER_M),
+        "· 绿  每步最大垂距 = %.2fpx ≈ %.1fmm —— 轨迹离理想直线最远多少。"
+        % (perp_max, perp_max * 1000.0 / PX_PER_M),
+        ("【结论】", True),
+        "规则 vs 错选, 误差差距 30 倍以上 → 选轴规则必须遵守;",
+        "规则下全程垂距 <2px → 路径本身贴直线, 终点 ≤5px 偏移来自死区提前停;",
+        "物理换算: 1px ≈ 2.84mm (PX_PER_M=352)。对 0.5m 标定矩形, 5px≈14mm 可忽略。",
+    ], y0=0.02, h=0.42, title="详细说明", fs=8.2)
+    au.add_footer(fig, "gen_large_figs.py")
     fig.savefig(os.path.join(OUT, "fig4_feasibility_basis.png"), dpi=150, bbox_inches="tight")
     plt.close(fig)
+    print("[OK] fig4_feasibility_basis.png")
 
 
 # ============================================================================

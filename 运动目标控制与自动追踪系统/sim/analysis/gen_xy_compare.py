@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-gen_xy_compare.py  ——  X算Y vs Y算X 逐条对比
+gen_xy_compare.py  ——  X算Y vs Y算X 逐条对比  (fig7)  [v2: 防豆腐块 + 目的横幅 + 详细解释]
 ================================================================================
 对每条线段分别模拟「驱动X轴(用calcY)」和「驱动Y轴(用calcX)」两种方式,
 对比各自的终点误差。直观展示: 规则选大轴 = 在两种方式中选误差更小的那个。
@@ -9,17 +9,17 @@ gen_xy_compare.py  ——  X算Y vs Y算X 逐条对比
 用法: python gen_xy_compare.py
 ================================================================================
 """
-import os, csv, math, struct, random
+import os, math, struct, random
 
 import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.font_manager import FontProperties
+from matplotlib.patches import FancyBboxPatch
+
+import analysis_utils as au
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = HERE
-_FONT = FontProperties(fname=r"C:\\Windows\\Fonts\\simhei.ttf")
-plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei"]
-plt.rcParams["axes.unicode_minus"] = False
+au.setup_chinese_font()
 
 def f32(x): return struct.unpack("f", struct.pack("f", float(x)))[0]
 def trunc(x): return int(x)
@@ -87,7 +87,8 @@ def main():
                      "note":s["note"]})
 
     fig=plt.figure(figsize=(11,9))
-    ax=fig.add_axes([0.10,0.52,0.85,0.38])
+    # 主图区避开顶部横幅
+    ax=fig.add_axes([0.10,0.50,0.85,0.36])
     xs_x,ys_x,xs_y,ys_y=[],[],[],[]
     for r in rows:
         xs_x.append(r["ratio"]); ys_x.append(r["err_x"])
@@ -95,35 +96,34 @@ def main():
     ax.scatter(xs_x,ys_x,s=14,c="#1f77b4",alpha=0.7,label="驱动 X 轴 (calcY)")
     ax.scatter(xs_y,ys_y,s=14,c="#ff7f0e",alpha=0.7,label="驱动 Y 轴 (calcX)")
     ax.set_xscale("log"); ax.set_yscale("log")
-    ax.set_xlabel("ratio = |dx|/|dy|",fontproperties=_FONT)
-    ax.set_ylabel("终点误差 (px)",fontproperties=_FONT)
-    ax.set_title("图7  X算Y vs Y算X 终点误差逐条对比",fontproperties=_FONT)
+    ax.set_xlabel("ratio = |dx|/|dy|")
+    ax.set_ylabel("终点误差 (px)")
+    ax.set_title("图7  X算Y vs Y算X 终点误差逐条对比")
     ax.axvline(1.0,color="k",ls="--",lw=1)
-    ax.legend(loc="upper right",prop=_FONT,fontsize=8)
+    ax.legend(loc="upper right",fontsize=8)
     ax.grid(True,alpha=0.3,which="both")
 
-    # 解释区
-    exp_ax=fig.add_axes([0,0.02,1,0.38]); exp_ax.axis("off")
-    from matplotlib.patches import FancyBboxPatch
-    exp_ax.add_patch(FancyBboxPatch((0.005,0.005),0.99,0.99,boxstyle="square,pad=0",
-        transform=exp_ax.transAxes,facecolor="#fafbfc",edgecolor="#999",linewidth=1.2,zorder=1))
-    lines=[
-        ("## 这张图在模拟什么",True),
-        ("每条线段都跑了两遍: 一遍驱动X(calcY推导y), 一遍驱动Y(calcX推导x)。",False),
-        ("蓝点=驱动X的终点误差, 橙点=驱动Y的终点误差。同一条线的两个点上下对应。",False),
-        ("## 核心规律",True),
-        ("ratio>1 (横着): 蓝点低、橙点高 --> 驱动X更好 (dx大, 驱动大轴)",False),
-        ("ratio<1 (竖着): 橙点低、蓝点高 --> 驱动Y更好 (dy大, 驱动大轴)",False),
-        ("ratio=1 (对角): 两点重合 --> 驱动谁一样",False),
-        ("## 结论",True),
-        ("规则 |dx|>=|dy|->驱动X 等价于: 在两种方法中选误差更小的那个。",False),
-        ("这不是经验法则,而是数学最优: 驱动大轴时有效斜率<=1, 误差上界最小化。",False),
-    ]
-    y=0.96
-    for txt,bold in lines:
-        exp_ax.text(0.03,y,txt,transform=exp_ax.transAxes,va="top",ha="left",
-                    fontsize=8.5,fontproperties=_FONT,color="#222",fontweight=("bold" if bold else "normal"))
-        y-=0.095
+    au.add_banner(fig, "图7  驱动 X vs 驱动 Y 逐条配对对比",
+                  "每条线段同时用两种方式走一遍, 把两种终点误差画成上下配对的散点 —— "
+                  "证明“按规则选轴”本质就是“选误差更小的那种方式”")
+    au.add_explanation(fig, [
+        ("【这张图在模拟什么】", True),
+        "对 80 条线段(6 手工 + 74 随机), 每条都“跑两遍”: 一遍驱动 X 轴(Y 用 calcY 推导), "
+        "一遍驱动 Y 轴(X 用 calcX 推导)。两条误差曲线上下配对, 直接可比较。",
+        ("【怎么读】", True),
+        "· 蓝点 = 驱动 X 的终点误差; 橙点 = 驱动 Y 的终点误差; 同一线段的两个点上下对应;",
+        "· ratio>1(横线): 蓝低橙高 → 驱动 X 更好(dx 大, 驱动大轴);",
+        "· ratio<1(竖线): 橙低蓝高 → 驱动 Y 更好(dy 大, 驱动大轴);",
+        "· ratio=1(对角): 两点重合 → 驱动谁一样。",
+        ("【核心结论】", True),
+        "规则 |dx|>=|dy|→驱动X 等价于“在两种驱动方式里自动选误差更小的那个”;",
+        "这不是经验法则, 而是数学最优: 驱动大轴时有效斜率≤1, "
+        "终点误差上界 = DEADZONE×√2 ≈ 5.66px 被最小化。",
+        ("【对固件的意义】", True),
+        "固件 contorl.c 的选轴分支(if |dx|>=|dy| 驱动X, else 驱动Y)就是在执行这个最优选择, "
+        "无需人工干预即可在所有斜率下拿到最小终点误差。",
+    ], y0=0.02, h=0.42, title="详细说明", fs=8.2)
+    au.add_footer(fig, "gen_xy_compare.py")
     fig.savefig(os.path.join(OUT,"fig7_xy_compare.png"),dpi=150,bbox_inches="tight")
     plt.close(fig)
     print("[OK] fig7_xy_compare.png")

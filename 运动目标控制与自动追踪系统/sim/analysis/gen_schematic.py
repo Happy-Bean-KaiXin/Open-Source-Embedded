@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-gen_schematic.py  ——  空间示意图 (fig6)
+gen_schematic.py  ——  空间示意图 (fig6)  [v2: 防豆腐块 + 目的横幅 + 详细解释]
 ================================================================================
 画一条具体线段 S->E 的实际运动轨迹, 展示:
   - 起点 S、理想终点 E、实际停点 P'
@@ -19,14 +19,13 @@ import struct
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.font_manager import FontProperties
 from matplotlib.patches import FancyBboxPatch, Rectangle
+
+import analysis_utils as au
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = HERE
-_FONT = FontProperties(fname=r"C:\Windows\Fonts\simhei.ttf")
-plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei"]
-plt.rcParams["axes.unicode_minus"] = False
+au.setup_chinese_font()          # 自动探测中文字体, 防豆腐块
 
 
 def f32(x):
@@ -96,7 +95,8 @@ def main():
     err = math.hypot(Pp[0]-E[0], Pp[1]-E[1])
 
     fig = plt.figure(figsize=(11, 10))
-    ax = fig.add_axes([0.08, 0.35, 0.84, 0.55])
+    # 主图压到 y 0.30~0.90 (横幅占顶部 0.93~1.0)
+    ax = fig.add_axes([0.08, 0.30, 0.84, 0.55])
 
     # ---- 主图: 轨迹 + 理想线 ----
     ax.plot([S[0], E[0]], [S[1], E[1]], "-", c="#2ca02c", lw=2,
@@ -114,16 +114,16 @@ def main():
                 arrowprops=dict(arrowstyle="<->", color="#d62728", lw=2))
 
     # 文字标注
-    ax.text(S[0]-8, S[1]+5, "S(%d,%d)" % S, fontproperties=_FONT, fontsize=10,
+    ax.text(S[0]-8, S[1]+5, "S(%d,%d)" % S, fontsize=10,
             ha="right", color="k")
-    ax.text(E[0]+8, E[1]+5, "E(%d,%d)" % E, fontproperties=_FONT, fontsize=10,
+    ax.text(E[0]+8, E[1]+5, "E(%d,%d)" % E, fontsize=10,
             ha="left", color="r")
     ax.text(Pp[0]+8, Pp[1]-8, "P'(%.1f,%.1f)\nerr=%.2fpx" % (Pp[0], Pp[1], err),
-            fontproperties=_FONT, fontsize=9, ha="left", color="#d62728")
+            fontsize=9, ha="left", color="#d62728")
 
     # ---- 放大窗 (inset) ----
-    inset_ax = fig.add_axes([0.58, 0.38, 0.34, 0.22])
-    inset_ax.set_title("放大: P' 与 E 的偏差", fontproperties=_FONT, fontsize=9)
+    inset_ax = fig.add_axes([0.58, 0.33, 0.34, 0.22])
+    inset_ax.set_title("放大: P' 与 E 的偏差", fontsize=9)
     cx, cy = (E[0]+Pp[0])/2, (E[1]+Pp[1])/2
     span = max(abs(E[0]-Pp[0]), abs(E[1]-Pp[1])) * 2.5 + 15
     inset_ax.set_xlim(cx-span/2, cx+span/2)
@@ -136,45 +136,35 @@ def main():
     for spine in inset_ax.spines.values():
         spine.set_color("#888")
 
-    ax.set_xlabel("X (px)", fontproperties=_FONT)
-    ax.set_ylabel("Y (px)", fontproperties=_FONT)
+    ax.set_xlabel("X (px)")
+    ax.set_ylabel("Y (px)")
     ax.set_title("图6  空间示意图: S(100,100)->E(160,140)->P'(%.1f,%.1f)  误差=%.2fpx"
-                 % (Pp[0], Pp[1], err), fontproperties=_FONT)
-    ax.legend(loc="upper left", prop=_FONT, fontsize=8)
+                 % (Pp[0], Pp[1], err))
+    ax.legend(loc="upper left", fontsize=8)
     ax.grid(True, alpha=0.3)
     ax.set_aspect("equal", adjustable="datalim")
 
-    # ---- 解释区 ----
-    exp_ax = fig.add_axes([0.02, 0.02, 0.96, 0.26])
-    exp_ax.axis("off")
-    border = FancyBboxPatch((0.005, 0.005), 0.99, 0.99,
-                             boxstyle="square,pad=0",
-                             transform=exp_ax.transAxes,
-                             facecolor="#fafbfc", edgecolor="#999",
-                             linewidth=1.2, zorder=1)
-    exp_ax.add_patch(border)
-    lines = [
-        ("## 图6 在模拟什么", True),
-        ("用一条具体的「中等斜率」线段(dx=60,dy=40)展示舵机实际运动轨迹。", False),
-        ("绿色直线 = 理想路径; 蓝色阶梯 = 固件按规则驱动X轴的实际落点序列;", False),
-        ("黑色圆点=起点S, 红色星号=目标E, 橙色菱形=实际停点P'(死区内停)。", False),
-        ("## 关键数字", True),
-        ("dx=60, dy=40, ratio=1.5 --> 规则要求驱动 X 轴。", False),
-        ("步长 STEP=7, 死区 DEADZONE=4 --> 驱动轴进入目标+-4px 即停。", False),
-        ("终点误差 = |P'E| = %.2f px (约 %.1f mm)。这是 int 截断 + 死区的综合结果。" % (
-            err, err * 1000.0 / 352.0), False),
-        ("## 物理含义", True),
-        ("规划坐标单位为 px (像素), PX_PER_M=352 --> 1px ≈ 2.84mm。", False),
-        ("STEP=7 ≈ 20mm (每次跳进约2cm), DEADZONE=4 ≈ 11mm (够近就停)。", False),
-        ("%.2fpx 终点误差 ≈ %.1fmm -- 对标定矩形(0.5m边长)而言可忽略。" % (
-            err, err * 1000.0 / 352.0), False),
-    ]
-    y = 0.96
-    for txt, bold in lines:
-        w = "bold" if bold else "normal"
-        exp_ax.text(0.03, y, txt, transform=exp_ax.transAxes, va="top", ha="left",
-                    fontsize=8.5, fontproperties=_FONT, color="#222", fontweight=w)
-        y -= 0.075
+    # ---- 目的横幅 + 解释区 (自动换行) ----
+    au.add_banner(fig, "图6  单条线段空间示意图",
+                  "用一条具体线段把“终点误差”从抽象数字变成看得见的几何图形: "
+                  "停点 P' 为什么不在目标 E 上, 差了多少, 这个误差由什么造成")
+    au.add_explanation(fig, [
+        ("【这张图在模拟什么】", True),
+        "用一条具体的中等斜率线段 S(100,100)→E(160,140)(dx=60, dy=40, ratio=1.5) "
+        "演示舵机实际怎么走: 规则要求驱动 X 轴, 每步 +7px, Y 坐标每步用斜率公式算出。",
+        ("【图元素对照】", True),
+        "· 绿直线 = 理想路径(期望轨迹); 蓝阶梯 = 固件每步的实际落点序列;",
+        "· 黑圆 = 起点 S; 红星 = 目标 E; 橙菱形 = 实际停点 P'(进入 4px 死区即停);",
+        "· 红色双向箭头 = P' 到 E 的终点误差; 右上小窗 = P' 与 E 的局部放大图。",
+        ("【关键数字】", True),
+        "· 步长 STEP=7px ≈ 20mm; 死区 DEADZONE=4px ≈ 11mm(够近就停);",
+        "· 本线段终点误差 err=%.2fpx ≈ %.1fmm —— 由 int 截断 + 死区机制共同造成;"
+        % (err, err * 1000.0 / 352.0),
+        "· 物理换算: 1px ≈ 2.84mm (PX_PER_M=352)。",
+        ("【工程含义】", True),
+        "%.1fmm 的终点偏差对 0.5m 矩形标定场景可忽略; 若做“精确打点”, 可在规划层补偿停点, "
+        "或到达后加一次小步微调(把最后 4px 死区误差吃掉)。" % (err * 1000.0 / 352.0),
+    ], y0=0.01, h=0.26, title="详细说明", fs=8.2, wrap_width=100)
 
     fig.savefig(os.path.join(OUT, "fig6_schematic.png"), dpi=150, bbox_inches="tight")
     plt.close(fig)
