@@ -384,7 +384,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 			if(Flag.dx > 0) {              // 如果直线方程的dx>0 就让x的实际值加加
 				if(Flag.Is_10ms_YES == 1) {  // 如果10ms到了，就让实际值加1
 					
-					Flag.x_actual+=7;
+					Flag.x_actual+=BIG_FRAME_STEP;
 					Flag.y_actual = calculateY(Flag.x_actual, Flag.Slope, Flag.Intercpet);  // 使用x的实际坐标值算y
 					Flag.Is_10ms_YES = 0;
 					if(myabs(Flag.x_actual - RetangleX[0]) < 4) {  // 如果实际值等于到达的第一个目标值，进行下一个状态
@@ -399,7 +399,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 			else {                         // 如果dx<0 就让实际值减减
 				if(Flag.Is_10ms_YES == 1) {  // 就让实际值减1
 					
-					Flag.x_actual-=7;
+					Flag.x_actual-=BIG_FRAME_STEP;
 					Flag.y_actual = calculateY(Flag.x_actual, Flag.Slope, Flag.Intercpet); 
 					Flag.Is_10ms_YES = 0;
 					if(myabs(Flag.x_actual - RetangleX[0]) < 4) {  // 如果实际值等于到达的第一个目标值，进行下一个状态
@@ -422,7 +422,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 			if(Flag.dy > 0) {
 				if(Flag.Is_10ms_YES == 1) {
 					Flag.Is_10ms_YES = 0;
-					Flag.y_actual+=7;
+					Flag.y_actual+=BIG_FRAME_STEP;
 					if(myabs(Flag.y_actual - RetangleY[0]) < 4) {
 						Flag.x_actual = RetangleX[0];
 						Flag.y_actual = RetangleY[0];
@@ -435,7 +435,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 			else {
 				if(Flag.Is_10ms_YES == 1) {
 					Flag.Is_10ms_YES = 0;
-					Flag.y_actual-=7;
+					Flag.y_actual-=BIG_FRAME_STEP;
 					// [BUGFIX] dy<0 分支死区从 <1 修正为 <4，与 dy>0 分支对称 (对齐仿真基线)
 					if(myabs(Flag.y_actual - RetangleY[0]) < 4) {
 						Flag.x_actual = RetangleX[0];
@@ -454,7 +454,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 				if(Flag.dx > 0) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.x_actual+=7;
+						Flag.x_actual+=BIG_FRAME_STEP;
 						Flag.y_actual = calculateY(Flag.x_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.x_actual - RetangleX[1]) < 4) {
 							Flag.y_actual = RetangleY[1];
@@ -468,7 +468,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 				else {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.x_actual-=7;
+						Flag.x_actual-=BIG_FRAME_STEP;
 						Flag.y_actual = calculateY(Flag.x_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.x_actual - RetangleX[1]) < 4) {
 							Flag.y_actual = RetangleY[1];
@@ -486,7 +486,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 				if(Flag.dy > 0) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.y_actual+=7;
+						Flag.y_actual+=BIG_FRAME_STEP;
 						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.y_actual - RetangleY[1]) < 4) {
 							Flag.x_actual = RetangleX[1];
@@ -500,7 +500,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 				else {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.y_actual-=7;
+						Flag.y_actual-=BIG_FRAME_STEP;
 						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.y_actual - RetangleY[1]) < 4) {
 							Flag.x_actual = RetangleX[1];
@@ -518,7 +518,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 				if(Flag.dx > 0) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.x_actual+=7;
+						Flag.x_actual+=BIG_FRAME_STEP;
 						Flag.y_actual = calculateY(Flag.x_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.x_actual - RetangleX[2]) < 4) {
 							Flag.y_actual = RetangleY[2];
@@ -532,7 +532,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 				else {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.x_actual-=7;
+						Flag.x_actual-=BIG_FRAME_STEP;
 						Flag.y_actual = calculateY(Flag.x_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.x_actual - RetangleX[2]) < 4) {
 							Flag.y_actual = RetangleY[2];
@@ -548,7 +548,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 				if(Flag.dy > 0) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.y_actual+=7;
+						Flag.y_actual+=BIG_FRAME_STEP;
 						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.y_actual - RetangleY[2]) < 4) {
 							Flag.x_actual = RetangleX[2];
@@ -562,7 +562,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 				else {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.y_actual-=7;
+						Flag.y_actual-=BIG_FRAME_STEP;
 						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.y_actual - RetangleY[2]) < 4) {
 							Flag.x_actual = RetangleX[2];
@@ -579,7 +579,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 				if(Flag.dx > 0) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.x_actual+=7;
+						Flag.x_actual+=BIG_FRAME_STEP;
 						Flag.y_actual = calculateY(Flag.x_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.x_actual - RetangleX[3]) < 10) {
 							Flag.y_actual = RetangleY[3];
@@ -593,7 +593,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 				else {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.x_actual-=7;
+						Flag.x_actual-=BIG_FRAME_STEP;
 						Flag.y_actual = calculateY(Flag.x_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.x_actual - RetangleX[3]) < 10) {
 							Flag.y_actual = RetangleY[3];
@@ -609,7 +609,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 				if(Flag.dy > 0) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.y_actual+=7;
+						Flag.y_actual+=BIG_FRAME_STEP;
 						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.y_actual - RetangleY[3]) < 10) {
 							Flag.x_actual = RetangleX[3];
@@ -623,7 +623,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 				else {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.y_actual-=7;
+						Flag.y_actual-=BIG_FRAME_STEP;
 						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.y_actual - RetangleY[3]) < 10) {
 							Flag.x_actual = RetangleX[3];
@@ -640,7 +640,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 				if(Flag.dx > 0) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.x_actual+=7;
+						Flag.x_actual+=BIG_FRAME_STEP;
 						Flag.y_actual = calculateY(Flag.x_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.x_actual - RetangleX[0]) < 10) {
 							Flag.y_actual = RetangleY[0];
@@ -657,7 +657,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 				else {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.x_actual-=7;
+						Flag.x_actual-=BIG_FRAME_STEP;
 						Flag.y_actual = calculateY(Flag.x_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.x_actual - RetangleX[0]) < 10) {
 							Flag.y_actual = RetangleY[0];
@@ -676,7 +676,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 				if(Flag.dy > 0) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.y_actual+=7;
+						Flag.y_actual+=BIG_FRAME_STEP;
 						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.y_actual - RetangleY[0]) < 	10) {
 							Flag.x_actual = RetangleX[0];
@@ -694,7 +694,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 				else {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.y_actual-=7;
+						Flag.y_actual-=BIG_FRAME_STEP;
 						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.y_actual - RetangleY[0]) < 10) {
 							Flag.x_actual = RetangleX[0];
@@ -716,10 +716,10 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 }
 
 void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
-void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 	// [BUGFIX] BUG2: 黑框使用自身四角几何中心 bx_c/by_c（而非红框标定中心 x_centry/y_centry）
 	int bx_c = (Black_Retanx[0] + Black_Retanx[1] + Black_Retanx[2] + Black_Retanx[3]) / 4;
 	int by_c = (Black_Retany[0] + Black_Retany[1] + Black_Retany[2] + Black_Retany[3]) / 4;
+	switch(RED_LASER.Laser_State) {
 		case Box_Square_State:
 			// [BUGFIX] BUG3: 角点起步(宏=1)直接进 Start_To_Second 规避"中心→角点"脱胶段;
 			//   主流程(宏=0)保持从黑框自身中心起步(Centy_To_Start)
@@ -883,7 +883,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 			if(Flag.dx > 0) {              // 如果直线方程的dx>0 就让x的实际值加加
 				if(Flag.Is_10ms_YES == 1) {  // 如果10ms到了，就让实际值加1
 					
-					Flag.x_actual+=1;
+					Flag.x_actual+=BLACK_FRAME_STEP;
 					Flag.y_actual = calculateY(Flag.x_actual, Flag.Slope, Flag.Intercpet);  // 使用x的实际坐标值算y
 					Flag.Is_10ms_YES = 0;
 					if(myabs(Flag.x_actual - Black_Retanx[0]) < 2) {  // 如果实际值等于到达的第一个目标值，进行下一个状态
@@ -898,7 +898,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 			else {                         // 如果dx<0 就让实际值减减
 				if(Flag.Is_10ms_YES == 1) {  // 就让实际值减1
 					
-					Flag.x_actual-=1;
+					Flag.x_actual-=BLACK_FRAME_STEP;
 					Flag.y_actual = calculateY(Flag.x_actual, Flag.Slope, Flag.Intercpet); 
 					Flag.Is_10ms_YES = 0;
 					if(myabs(Flag.x_actual - Black_Retanx[0]) < 2) {  // 如果实际值等于到达的第一个目标值，进行下一个状态
@@ -921,7 +921,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 			if(Flag.dy > 0) {
 				if(Flag.Is_10ms_YES == 1) {
 					Flag.Is_10ms_YES = 0;
-					Flag.y_actual+=1;
+					Flag.y_actual+=BLACK_FRAME_STEP;
 					if(myabs(Flag.y_actual - Black_Retany[0]) < 2) {
 						Flag.x_actual = Black_Retanx[0];
 						Flag.y_actual = Black_Retany[0];
@@ -934,7 +934,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 			else {
 				if(Flag.Is_10ms_YES == 1) {
 					Flag.Is_10ms_YES = 0;
-					Flag.y_actual-=1;
+					Flag.y_actual-=BLACK_FRAME_STEP;
 					if(myabs(Flag.y_actual - Black_Retany[0]) < 2) {
 						Flag.x_actual = Black_Retanx[0];
 						Flag.y_actual = Black_Retany[0];
@@ -952,7 +952,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 				if(Flag.dx > 0) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.x_actual+=1;
+						Flag.x_actual+=BLACK_FRAME_STEP;
 						Flag.y_actual = calculateY(Flag.x_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.x_actual - Black_Retanx[1]) < 2) {
 							Flag.y_actual = Black_Retany[1];
@@ -966,7 +966,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 				else {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.x_actual-=1;
+						Flag.x_actual-=BLACK_FRAME_STEP;
 						Flag.y_actual = calculateY(Flag.x_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.x_actual - Black_Retanx[1]) < 2) {
 							Flag.y_actual = Black_Retany[1];
@@ -998,7 +998,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 				else {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.y_actual-=1;
+						Flag.y_actual-=BLACK_FRAME_STEP;
 						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.y_actual - Black_Retany[1]) < 2) {
 							Flag.x_actual = Black_Retanx[1];
@@ -1016,7 +1016,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 				if(Flag.dx > 0) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.x_actual+=1;
+						Flag.x_actual+=BLACK_FRAME_STEP;
 						Flag.y_actual = calculateY(Flag.x_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.x_actual - Black_Retanx[2]) < 2) {
 							Flag.y_actual = Black_Retany[2];
@@ -1030,7 +1030,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 				else {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.x_actual-=1;
+						Flag.x_actual-=BLACK_FRAME_STEP;
 						Flag.y_actual = calculateY(Flag.x_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.x_actual - Black_Retanx[2]) < 2) {
 							Flag.y_actual = Black_Retany[2];
@@ -1046,7 +1046,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 				if(Flag.dy > 0) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.y_actual+=1;
+						Flag.y_actual+=BLACK_FRAME_STEP;
 						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.y_actual - Black_Retany[2]) < 2) {
 							Flag.x_actual = Black_Retanx[2];
@@ -1060,7 +1060,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 				else {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.y_actual-=1;
+						Flag.y_actual-=BLACK_FRAME_STEP;
 						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.y_actual - Black_Retany[2]) < 2) {
 							Flag.x_actual = Black_Retanx[2];
@@ -1077,7 +1077,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 				if(Flag.dx > 0) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.x_actual+=1;
+						Flag.x_actual+=BLACK_FRAME_STEP;
 						Flag.y_actual = calculateY(Flag.x_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.x_actual - Black_Retanx[3]) < 2) {
 							Flag.y_actual = Black_Retany[3];
@@ -1091,7 +1091,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 				else {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.x_actual-=1;
+						Flag.x_actual-=BLACK_FRAME_STEP;
 						Flag.y_actual = calculateY(Flag.x_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.x_actual - Black_Retanx[3]) < 2) {
 							Flag.y_actual = Black_Retany[3];
@@ -1107,7 +1107,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 				if(Flag.dy > 0) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.y_actual+=1;
+						Flag.y_actual+=BLACK_FRAME_STEP;
 						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.y_actual - Black_Retany[3]) < 2) {
 							Flag.x_actual = Black_Retanx[3];
@@ -1121,7 +1121,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 				else {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.y_actual-=1;
+						Flag.y_actual-=BLACK_FRAME_STEP;
 						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.y_actual - Black_Retany[3]) < 2) {
 							Flag.x_actual = Black_Retanx[3];
@@ -1138,7 +1138,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 				if(Flag.dx > 0) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.x_actual+=1;
+						Flag.x_actual+=BLACK_FRAME_STEP;
 						Flag.y_actual = calculateY(Flag.x_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.x_actual - Black_Retanx[0]) < 2) {
 							Flag.y_actual = Black_Retany[0];
@@ -1155,7 +1155,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 				else {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.x_actual-=1;
+						Flag.x_actual-=BLACK_FRAME_STEP;
 						Flag.y_actual = calculateY(Flag.x_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.x_actual - Black_Retanx[0]) < 2) {
 							Flag.y_actual = Black_Retany[0];
@@ -1174,7 +1174,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 				if(Flag.dy > 0) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.y_actual+=1;
+						Flag.y_actual+=BLACK_FRAME_STEP;
 						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.y_actual - Black_Retany[0]) < 	2) {
 							Flag.x_actual = Black_Retanx[0];
@@ -1192,7 +1192,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 				else {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.y_actual-=1;
+						Flag.y_actual-=BLACK_FRAME_STEP;
 						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.y_actual - Black_Retany[0]) < 2) {
 							Flag.x_actual = Black_Retanx[0];
