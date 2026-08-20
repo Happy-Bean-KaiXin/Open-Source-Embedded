@@ -29,7 +29,7 @@ void Key_Proc() {
 	static __IO uint32_t uwTick_Key_Speed;
 	
 	if(uwTick - uwTick_Key_Speed < 10) return;	// 控制函数执行的频率
-		uwTick_Key_Speed = uwTick;	              // 每50ms执行一次
+		uwTick_Key_Speed = uwTick;	// [BUGFIX] actual interval is 10 ms (throttled by the < 10 check above); the old comment said 50 ms
 		
 	
 	key_value = Key_Scan();
@@ -81,12 +81,15 @@ void K3_Driver(void) {
 	static uint8_t K3_State;
 	K3_State = 1;
 	switch(K3_State) {
-		case 1: 
+		case 1:
 			OLED_Clear();
 			Mode2_SET;
 			Flag.Is_Mode_Set = 2;
 			Flag.Is_Uart_Rec = 1;  // 开启识别矩形  串口接收
 			Flag.Is_OLED_Face = 5;
+			// 复位黑框状态机：确保每次进入模式2都从 Box_Square_State 重新初始化，
+			// 否则 Laser_State 会停留在上一轮结束状态，导致 BUG3 修复的起点选择(角点起步)不生效
+			RED_LASER.Laser_State = Box_Square_State;
 			break;
 	}
 }

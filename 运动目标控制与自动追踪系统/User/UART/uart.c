@@ -153,15 +153,19 @@ int data_test(int* data) {
 
 // 发送端：0xa3, 0xb3, 数据, 0xc3
 void Send_Data(const uint8_t* ptr) {
-	int i = 0;
-	int len = strlen((const char* )ptr) + 3;   // 加上帧头帧尾的数据
-	uint8_t* data;
-	
-//	data[0] = 0xa3;
-//	data[1] = 0xb3;
-//	(data + 2) = ptr;
-	while(i < len) {
-		HAL_UART_Transmit_DMA(&huart2, &data[i], 1);
-		i++;
+	/* [BUGFIX] The original code declared 'uint8_t* data;' without allocating it,
+	   then dereferenced it in HAL_UART_Transmit_DMA -> undefined behaviour / HardFault.
+	   Build the full frame (header 0xa3 0xb3 + payload + tail 0xc3) into the existing
+	   sti_buff and transmit it. */
+	int payload_len = (ptr != NULL) ? (int)strlen((const char*)ptr) : 0;
+	int len = payload_len + 3;            /* 2-byte header + payload + 1-byte tail */
+	int i;
+	if (len > (int)sizeof(sti_buff)) len = (int)sizeof(sti_buff);
+	sti_buff[0] = 0xa3;                  /* frame header */
+	sti_buff[1] = 0xb3;
+	if (payload_len > 0) memcpy(&sti_buff[2], ptr, payload_len);
+	sti_buff[2 + payload_len] = 0xc3;    /* frame tail */
+	for (i = 0; i < len; i++) {
+		HAL_UART_Transmit_DMA(&huart2, &sti_buff[i], 1);
 	}
 }
