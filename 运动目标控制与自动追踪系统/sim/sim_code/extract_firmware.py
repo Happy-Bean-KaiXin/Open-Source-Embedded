@@ -66,8 +66,9 @@ def read_src_gbk(path):
 
 def extract_function(src, name):
     """找到 `name(...)` 签名，从其后第一个 '{' 起做花括号配对，返回完整函数文本。"""
-    # 匹配函数签名:  返回类型 名称 ( ... )   (允许换行/空格)
-    sig_pat = re.compile(r"(?:[\w\*]\s+)+" + re.escape(name) + r"\s*\(")
+    # [BUGFIX] 原正则 (?:[\w\*]\s+)+ 贪婪匹配只从 't ' 开始（float 内无空白），
+    #   把 "float" 的 "floa" 吃掉只剩 "t"。改用 [\w\*]+\s+ 让整个类型 token 被匹配。
+    sig_pat = re.compile(r"(?:[\w\*]+\s+)+" + re.escape(name) + r"\s*\(")
     m = sig_pat.search(src)
     if not m:
         return None

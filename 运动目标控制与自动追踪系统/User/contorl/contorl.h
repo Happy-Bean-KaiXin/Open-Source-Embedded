@@ -28,6 +28,27 @@
 #define Identify_Lowleft   HAL_UART_Transmit_DMA(&huart2, (uint8_t *) "lowleft", strlen("lowleft"))
 #define Identify_Midpoint  HAL_UART_Transmit_DMA(&huart2, (uint8_t *) "midpoint", strlen("midpoint"))
 
+// 巡线步长（每个 10ms 定时器周期，x/y 实际坐标的像素增量）
+#define BIG_FRAME_STEP   7   // 红色大方框：每 tick 走 7 像素
+#define BLACK_FRAME_STEP 1   // 黑色小方框：每 tick 走 1 像素
+
+// 黑框(A4 靶纸)起点模式
+//   0: 主流程 —— 从 A4 自身四角几何中心起步（Centy_To_Start），光斑先由中心走到首个胶带角点，
+//               再 corner0→1→2→3→0 顺时针巡线。符合"以 A4 中心为起点"的设计意图；
+//               （中心→角点段会穿过 A4 纸内部约 13.6cm 脱离胶带，属已知 BUG3 现象，接收为代价）
+//   1: 备选方案（规避 BUG3）—— 直接从胶带角点[0]起步，跳过"中心→角点"段，全程贴胶带、连续脱离 0cm。
+//               仅在需要规避 BUG3 时把本宏置 1 重新编译启用。
+#define BLACK_FRAME_START_FROM_CORNER  0
+// 像素/米标定（OpenMV 像素 <-> 屏幕物理尺寸）
+//   176px 约 = 0.5m  =>  PX_PER_M = 352 px/m
+//   说明：本宏是 "OpenMV 像素 -> 屏幕实际厘米" 的标定系数，取决于
+//         OpenMV 分辨率(320x240)、屏幕实际尺寸、摄像头安装距离/角度。
+//   固件状态机本身只用像素坐标，不直接算 cm；但 cm 评分（如"连续脱离 5cm"）
+//   依赖此系数。务必按真机实测值修改，且仿真 sim/motion_sim.html 的
+//   PX_PER_M 常量须与本宏保持一致。
+#define PX_PER_M  352.0f
+
+
 // 变量定义
 extern int RetangleX[4];                    // 矩形框x轴的坐标
 extern int RetangleY[4];                    // 举行框y轴的坐标

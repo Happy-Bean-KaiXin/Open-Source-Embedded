@@ -195,6 +195,10 @@ void PARAM_Init(void) {
 
 // 计算一次函数的斜率
 float calculateSlope(float x1, float y1, float x2, float y2) {
+	// [BUGFIX] 竖边(x2==x1)时斜率无意义，直接返回 0：
+	//   该分段由各 *_Y_* 分支 if(Flag.dx!=0) 守卫保持 x 为常量，
+	//   避免除零产生 inf/未定义行为（与 Motion_TarCtrl_Sim.js 的 fixed_x 等价）。
+	if ((x2 - x1) == 0.0f) return 0.0f;
     return ((y2 - y1) / (x2 - x1));
 }
 
@@ -432,7 +436,8 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 				if(Flag.Is_10ms_YES == 1) {
 					Flag.Is_10ms_YES = 0;
 					Flag.y_actual-=7;
-					if(myabs(Flag.y_actual - RetangleY[0]) < 1) {
+					// [BUGFIX] dy<0 分支死区从 <1 修正为 <4，与 dy>0 分支对称 (对齐仿真基线)
+					if(myabs(Flag.y_actual - RetangleY[0]) < 4) {
 						Flag.x_actual = RetangleX[0];
 						Flag.y_actual = RetangleY[0];
 						// 进入下一个状态
