@@ -282,17 +282,17 @@ void USART2_IRQHandler(void)
   /* USER CODE BEGIN USART2_IRQn 0 */
 	uint32_t tmp_flag = 0;
   uint32_t temp;
-	tmp_flag =__HAL_UART_GET_FLAG(&huart2,UART_FLAG_IDLE); //��ȡIDLE��־λ
-	if((tmp_flag != RESET))//idle��־����λ
+	tmp_flag =__HAL_UART_GET_FLAG(&huart2,UART_FLAG_IDLE); //获取IDLE标志位
+	if((tmp_flag != RESET))//idle标志被置位
 	{
-		__HAL_UART_CLEAR_IDLEFLAG(&huart2);//�����־λ
+		__HAL_UART_CLEAR_IDLEFLAG(&huart2);//清除标志位
 		HAL_UART_DMAStop(&huart2);
-		temp  =  __HAL_DMA_GET_COUNTER(&hdma_usart2_rx);// ��ȡDMA��δ��������ݸ���
+		temp  =  __HAL_DMA_GET_COUNTER(&hdma_usart2_rx);// 获取DMA中未传输的数据个数
 
-		rx_len_1 =  BUFFER_SIZE - temp; //�ܼ�����ȥδ��������ݸ������õ��Ѿ����յ����ݸ���
-		recv_end_flag_1 = 1;  // ������ɱ�־λ��1
+		rx_len_1 =  BUFFER_SIZE - temp; //总计数减去未传输的数据个数，得到已经接收的数据个数
+		recv_end_flag_1 = 1;  // 接受完成标志位置1
 	}
-  HAL_UART_Receive_DMA(&huart2,uart2_rx_buffer,BUFFER_SIZE);//���´�DMA����
+  HAL_UART_Receive_DMA(&huart2,uart2_rx_buffer,BUFFER_SIZE);//重新打开DMA接收
   /* USER CODE END USART2_IRQn 0 */
   HAL_UART_IRQHandler(&huart2);
   /* USER CODE BEGIN USART2_IRQn 1 */

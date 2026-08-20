@@ -68,6 +68,7 @@ void SystemClock_Config(void);
   */
 int main(void)
 {
+
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
@@ -100,17 +101,17 @@ int main(void)
   /* USER CODE BEGIN 2 */
 	Servo_Angle_Init();
 	Servo_X_Angle_Set(0);
-	Servo_Y_Angle_Set(0);  // ¶æ»ú¸´Î»³õÊ¼»¯
+	Servo_Y_Angle_Set(0);  // èˆµæœºå¤ä½åˆå§‹åŒ–
 	
-	__HAL_UART_ENABLE_IT(&huart2, UART_IT_IDLE); //Ê¹ÄÜIDLEÖĞ¶Ï
+	__HAL_UART_ENABLE_IT(&huart2, UART_IT_IDLE); //ä½¿èƒ½IDLEä¸­æ–­
   HAL_UART_Receive_DMA(&huart2,uart2_rx_buffer,BUFFER_SIZE);
-	HAL_TIM_Base_Start_IT(&htim4);  // ¿ªÆô»ù±¾¶¨Ê±Æ÷4
-	HAL_TIM_Base_Start_IT(&htim3);  // ¿ªÆô»ù±¾¶¨Ê±Æ÷3
+	HAL_TIM_Base_Start_IT(&htim4);  // å¼€å¯åŸºæœ¬å®šæ—¶å™¨4
+	HAL_TIM_Base_Start_IT(&htim3);  // å¼€å¯åŸºæœ¬å®šæ—¶å™¨3
 //	HAL_UART_Receive_IT(&huart2,&rec,1);
 	OLED_Init();
 		
-	PID_Init();    // PID³õÊ¼»¯
-	PARAM_Init();	 // ²ÎÊı³õÊ¼»¯
+	PID_Init();    // PIDåˆå§‹åŒ–
+	PARAM_Init();	 // å‚æ•°åˆå§‹åŒ–
 	
   /* USER CODE END 2 */
 
@@ -118,12 +119,12 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-		USART_data_processing();  // ´®¿Ú½ÓÊÕ´¦Àíº¯Êı
+		USART_data_processing();  // ä¸²å£æ¥æ”¶å¤„ç†å‡½æ•°
 		OLED_Proc();
 		VOFA_Proc();
 		Key_Proc();
 		
-		if(Flag.Is_Mode_Set == 0) {       // ¸´Î»Ä£Ê½
+		if(Flag.Is_Mode_Set == 0) {       // å¤ä½æ¨¡å¼
 			if(None == 0) {
 				Flag.x_actual = Flag.x_centry;
 				Flag.y_actual = Flag.y_centry;
@@ -133,10 +134,10 @@ int main(void)
 				Flag.Angley = 0;
 			}
 		}
-		if(Flag.Is_Mode_Set == 1) {  // ×ß´ó¿ò
+		if(Flag.Is_Mode_Set == 1) {  // èµ°å¤§æ¡†
 			Motion_TarCtrl(RetangleX, RetangleY);
 		}
-		if(Flag.Is_Mode_Set == 2) {  // ×ß¾ØĞÎ¿ò
+		if(Flag.Is_Mode_Set == 2) {  // èµ°A4é¶çº¸
 			Motion_TarCtrl_Black(Black_Retanx, Black_Retany);
 		}
 
