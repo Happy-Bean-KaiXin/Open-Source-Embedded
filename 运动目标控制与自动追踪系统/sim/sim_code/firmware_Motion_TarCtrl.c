@@ -122,13 +122,13 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 			/********************************** 状态1的等待状态 ***********************************************/
 			if(Flag.FSTATE == Centy_To_Start) {
 				if(myabs(Flag.dx) - myabs(Flag.dy) > 0) {         // 比较dx与dy的大小去顶x与y谁是变量
-					Flag.x_actual = Flag.x_centry;  // 让实际值y等于y的中心坐标
-					Flag.y_actual = Flag.x_centry;
+					Flag.x_actual = Flag.x_centry;  // 让实际值x等于x的中心坐标
+					Flag.y_actual = Flag.y_centry;
 					RED_LASER.Laser_State = Centry_X_Start_State;   // 以x为变量算y
 				}
 				else {                                            // 如果dy大于dx
-					Flag.x_actual = Flag.x_centry;  // 让实际值y等于y的中心坐标
-					Flag.y_actual = Flag.x_centry;
+					Flag.x_actual = Flag.x_centry;  // 让实际值x等于x的中心坐标
+					Flag.y_actual = Flag.y_centry;
 					RED_LASER.Laser_State = Centry_Y_Start_State;   // 则以y为变量算x，进入以y变量算x的状态（中心到方框起点使用y当变量的状态）
 				}
 			}
@@ -142,7 +142,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 				}
 				else {                                            // 如果dy大于dx
 					Flag.y_actual = RetangleY[0];   // 					
-					Flag.x_actual = RetangleY[0];  
+					Flag.x_actual = RetangleX[0];  
 					RED_LASER.Laser_State = Start_Y_Second_State;   // 则以y为变量算x，进入以y变量算x的状态（中心到方框起点使用y当变量的状态）
 				}
 			}
@@ -188,7 +188,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 			break;
 		/********************************** 状态1下的子状态 ***********************************************/
 		case Centry_X_Start_State:        // 以x为变量算y的状态  中心到方框起点使用x当变量的状态
-//			Flag.x_actual = Flag.x_centry;  // 让实际值y等于y的中心坐标
+//			Flag.x_actual = Flag.x_centry;  // 让实际值x等于x的中心坐标
 //			Flag.y_actual = calculateY(Flag.x_actual, Flag.Slope, Flag.Intercpet);  // 使用x的实际坐标值算y
 			
 			if(Flag.dx > 0) {              // 如果直线方程的dx>0 就让x的实际值加加
@@ -525,19 +525,32 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 
 }
 void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
-	switch(RED_LASER.Laser_State) {
+void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
+	// [BUGFIX] BUG2: 黑框使用自身四角几何中心 bx_c/by_c（而非红框标定中心 x_centry/y_centry）
+	int bx_c = (Black_Retanx[0] + Black_Retanx[1] + Black_Retanx[2] + Black_Retanx[3]) / 4;
+	int by_c = (Black_Retany[0] + Black_Retany[1] + Black_Retany[2] + Black_Retany[3]) / 4;
 		case Box_Square_State:
+			// [BUGFIX] BUG3: 角点起步(宏=1)直接进 Start_To_Second 规避"中心→角点"脱胶段;
+			//   主流程(宏=0)保持从黑框自身中心起步(Centy_To_Start)
+			#if BLACK_FRAME_START_FROM_CORNER
+				Flag.x_actual = Black_Retanx[0];
+				Flag.y_actual = Black_Retany[0];
+				Flag.FSTATE = Start_To_Second;
 				RED_LASER.Laser_State = Any_Rectang_Box_State;
+			#else
+				Flag.FSTATE = Centy_To_Start;
+				RED_LASER.Laser_State = Any_Rectang_Box_State;
+			#endif
 			
 			break;
 		case Any_Rectang_Box_State:   // 任意位置起点状态，从起点到达终点（下一个起点），第一步计算斜率，截距
 			/********************************** 状态1 ***********************************************/
 			if(Flag.FSTATE == Centy_To_Start) {  // 状态1
-					Flag.Slope = calculateSlope(Flag.x_centry, Flag.y_centry, Black_Retanx[0], Black_Retany[0]);  // 传入中心坐标，和任意方框的起点坐标 计算斜率
-					Flag.Intercpet = calculateIntercept(Flag.x_centry, Flag.y_centry, Flag.Slope);          // 计算截距
+					Flag.Slope = calculateSlope(bx_c, by_c, Black_Retanx[0], Black_Retany[0]);  // 传入中心坐标，和任意方框的起点坐标 计算斜率
+					Flag.Intercpet = calculateIntercept(bx_c, by_c, Flag.Slope);          // 计算截距
 					// 计算dx， dy
-					Flag.dx = (Black_Retanx[0] - Flag.x_centry);
-					Flag.dy = (Black_Retany[0] - Flag.y_centry);
+					Flag.dx = (Black_Retanx[0] - bx_c);
+					Flag.dy = (Black_Retany[0] - by_c);
 					if(myabs(Flag.dx) - myabs(Flag.dy) > 0) {         // 比较dx与dy的大小去顶x与y谁是变量
 						RED_LASER.Laser_State = Cross_State;   // 以x为变量算y
 					}
@@ -607,13 +620,13 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 			/********************************** 状态1的等待状态 ***********************************************/
 			if(Flag.FSTATE == Centy_To_Start) {
 				if(myabs(Flag.dx) - myabs(Flag.dy) > 0) {         // 比较dx与dy的大小去顶x与y谁是变量
-					Flag.x_actual = Flag.x_centry;  // 让实际值y等于y的中心坐标
-					Flag.y_actual = Flag.x_centry;
+					Flag.x_actual = bx_c;  // 让实际值x等于x的中心坐标
+					Flag.y_actual = by_c;
 					RED_LASER.Laser_State = Centry_X_Start_State;   // 以x为变量算y
 				}
 				else {                                            // 如果dy大于dx
-					Flag.x_actual = Flag.x_centry;  // 让实际值y等于y的中心坐标
-					Flag.y_actual = Flag.x_centry;
+					Flag.x_actual = bx_c;  // 让实际值x等于x的中心坐标
+					Flag.y_actual = by_c;
 					RED_LASER.Laser_State = Centry_Y_Start_State;   // 则以y为变量算x，进入以y变量算x的状态（中心到方框起点使用y当变量的状态）
 				}
 			}
@@ -626,8 +639,8 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 					RED_LASER.Laser_State = Start_X_Second_State;   // 以x为变量算y
 				}
 				else {                                            // 如果dy大于dx
-					Flag.y_actual = Black_Retanx[0];   // 					
-					Flag.x_actual = Black_Retany[0];  
+					Flag.y_actual = Black_Retany[0];   // 					
+					Flag.x_actual = Black_Retanx[0];  
 					RED_LASER.Laser_State = Start_Y_Second_State;   // 则以y为变量算x，进入以y变量算x的状态（中心到方框起点使用y当变量的状态）
 				}
 			}
@@ -673,7 +686,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 			break;
 		/********************************** 状态1下的子状态 ***********************************************/
 		case Centry_X_Start_State:        // 以x为变量算y的状态  中心到方框起点使用x当变量的状态
-//			Flag.x_actual = Flag.x_centry;  // 让实际值y等于y的中心坐标
+//			Flag.x_actual = Flag.x_centry;  // 让实际值x等于x的中心坐标
 //			Flag.y_actual = calculateY(Flag.x_actual, Flag.Slope, Flag.Intercpet);  // 使用x的实际坐标值算y
 			
 			if(Flag.dx > 0) {              // 如果直线方程的dx>0 就让x的实际值加加
@@ -780,7 +793,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 				if(Flag.dy > 0) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
-						Flag.y_actual+=7;
+						Flag.y_actual+=BLACK_FRAME_STEP;
 						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
 						if(myabs(Flag.y_actual - Black_Retany[1]) < 2) {
 							Flag.x_actual = Black_Retanx[1];
