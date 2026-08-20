@@ -135,7 +135,10 @@ def main():
         # 仍然继续输出已抽取部分
 
     out_text = HEADER + "\n".join(blocks) + "\n"
-    with open(OUT, "w", encoding="utf-8") as f:
+    # [BUGFIX] 用 newline='' 禁止文本模式自动换行转换：
+    #   默认文本模式在 Windows 会把 '\n' 写成 '\r\n'，而固件源码已是 '\r\n'，
+    #   导致每个行尾变成 '\r\r\n'（多一个回车符，编辑器显示为多余空行）。
+    with open(OUT, "w", encoding="utf-8", newline="") as f:
         f.write(out_text)
     print("[OK] 已写出: %s  (%d 字节)" % (OUT, len(out_text.encode("utf-8"))))
 
