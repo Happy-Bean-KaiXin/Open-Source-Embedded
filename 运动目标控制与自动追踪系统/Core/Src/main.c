@@ -125,14 +125,13 @@ int main(void)
 		Key_Proc();
 		
 		if(Flag.Is_Mode_Set == 0) {       // 复位模式
-			if(None == 0) {
-				Flag.x_actual = Flag.x_centry;
-				Flag.y_actual = Flag.y_centry;
-			}
-			else if(None) {
-				Flag.Anglex = 0;
-				Flag.Angley = 0;
-			}
+			// [BUGFIX-5] 复位统一走 PID 闭环回中心:
+			//   - 无论 OpenMV 是否识别到红点, 目标都是屏幕中心 (x_centry/y_centry);
+			//   - 舵机角度由 10ms 定时器回调里的 Position_PID_RealizeX/Y(Flag.X_AXIS,
+			//     Flag.x_actual) 闭环计算, 这里只设定目标, 不直接写死 Anglex/Angley;
+			//   - 原逻辑 None==1 时直接 Anglex=0 会把舵机猛拉回机械零点而非屏幕原点, 已移除。
+			Flag.x_actual = Flag.x_centry;
+			Flag.y_actual = Flag.y_centry;
 		}
 		if(Flag.Is_Mode_Set == 1) {  // 走大框
 			Motion_TarCtrl(RetangleX, RetangleY);

@@ -8,6 +8,10 @@ led = Pin('P4', Pin.OUT_PP)
 led.low()
 
 # 全局变量定义
+# [BUGFIX-10] 红点阈值集中定义, 现场可按环境光微调(改后重新烧录):
+#   阈值结构: (L_min, L_max, A_min, A_max, B_min, B_max) LAB 空间
+#   红点漏检(频繁返回 None)  → 放宽 A_min/A_max(如 A_min 0→-10);
+#   误检环境红色物体         → 收窄 A/B 范围, 或提高 L_min 过滤暗红
 Red_threshold  = [(15, 100, 0, 72, -26, 55)] # 红色阈值
 Is_Recognize_Flag = 0   # 识别次数标志位
 Flag_Mode_Set = 0       # 识别模式标志位
@@ -67,7 +71,8 @@ def find_max(blobs):
 
 #识别红点
 def find_redPoint(img,thre):
-    sensor.set_auto_exposure(False,500)  #曝光速度  3000
+    # [BUGFIX-9] 曝光参数不再每帧设置(原代码每帧 set_auto_exposure 会反复触发
+    #   自动曝光调整, 导致帧率抖动/亮度跳变); 改为初始化时统一设置, 见 __main__ 尾部
     blobs = img.find_blobs(thre)
     if blobs:
         max_blob = find_max(blobs)
@@ -95,6 +100,12 @@ def clockwise_sort(points):
     # [BUGFIX] corner sorting must happen AFTER the whole for-loop has collected all polar_angles.
     # The original 'return' sat inside the for-body, so only the first point was processed:
     # 'out' had 1 element and out[1..3] raised IndexError, crashing find_rect (mode 2 rectangle recognition).
+    #
+    # [BUGFIX-11] 排序方向复核结论:
+    #   OpenMV 图像坐标系 y 向下, 顺时针角点(左上→右上→右下→左下)的 atan2 极角为
+    #   -3π/4 → -π/4 → π/4 → 3π/4, 恰好是递增序列, 故 sorted 升序 = 顺时针 ✓
+    #   依赖: set_vflip(False) / 未设 hmirror。若以后翻转摄像头(改 vflip/hmirror),
+    #   坐标系反向, 需改为 sorted(..., reverse=True) 才能保持顺时针。
     sorted_points = [point for _, point in sorted(zip(polar_angles, points))]
     return sorted_points
 
@@ -257,7 +268,9 @@ if  __name__ == "__main__":
     sensor.set_vflip(False)
     sensor.set_auto_whitebal(False)   # 自动白平衡
     sensor.set_auto_gain(False)
-    sensor.set_auto_exposure(False,exposure_us = 10000)
+    # [BUGFIX-9] 曝光统一在初始化设置一次(红点识别用 500us 短曝光,
+    #   激光亮点在暗背景上更清晰); 不再由 find_redPoint 每帧修改, 避免帧率抖动
+    sensor.set_auto_exposure(False,exposure_us = 500)
     sensor.set_contrast(0)
     sensor.set_brightness(0)
     # BUG1 修复：注释掉固定窗口(44,35,240,191)，改为整幅 QVGA(320x240) 捕获，

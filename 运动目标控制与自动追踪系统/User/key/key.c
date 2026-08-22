@@ -42,6 +42,10 @@ void Key_Proc() {
 		switch(key_down) {
 			case 1: 
 				Flag.Is_Mode_Set = 0;    // 复位模式
+				// [BUGFIX-7] 复位时重置巡线状态机, 避免下次按 K2/K3 从上次残留状态继续
+				RED_LASER.Laser_State = Box_Square_State;
+				Flag.FSTATE = Centy_To_Start;
+				Flag.Is_10ms_YES = 0;
 				Mode1_SET;
 				break;
 			case 2: 
@@ -73,6 +77,10 @@ void K2_Driver(void) {
 			Flag.Is_Mode_Set = 1;  // 开启模式1
 			Flag.Is_Uart_Rec = 0;  // 开启识别红点  串口接收
 			Flag.Is_OLED_Face = 1;
+			// [BUGFIX-7] 进入大框模式时重置状态机, 与 K3_Driver 对齐;
+			//   否则若上次运行结束(或从黑框切换), Laser_State/FSTATE 残留会导致从错误段起步
+			RED_LASER.Laser_State = Box_Square_State;
+			Flag.FSTATE = Centy_To_Start;
 			break;
 	}
 }
@@ -90,6 +98,7 @@ void K3_Driver(void) {
 			// 复位黑框状态机：确保每次进入模式2都从 Box_Square_State 重新初始化，
 			// 否则 Laser_State 会停留在上一轮结束状态，导致 BUG3 修复的起点选择(角点起步)不生效
 			RED_LASER.Laser_State = Box_Square_State;
+			Flag.FSTATE = Centy_To_Start;   // [BUGFIX-7] 同时重置 FSTATE, 避免跨模式残留
 			break;
 	}
 }

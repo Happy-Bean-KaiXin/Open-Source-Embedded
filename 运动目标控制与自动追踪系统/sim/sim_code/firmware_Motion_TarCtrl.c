@@ -42,6 +42,9 @@ int calculateX(float y, float slope, float intercept) {
 void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 	switch(RED_LASER.Laser_State) {
 		case Box_Square_State:
+				// [BUGFIX] 大框进入时重置 FSTATE 为 Centy_To_Start, 避免残留上次运行结束
+				//   状态(如 Fourth_To_End)导致再次按 K2 时从第 5 段开始而非中心起步
+				Flag.FSTATE = Centy_To_Start;
 				RED_LASER.Laser_State = Any_Rectang_Box_State;
 			
 			break;
@@ -227,7 +230,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 			break;
 		case Centry_Y_Start_State:   // 使用y当变量的状态
 //			Flag.y_actual = Flag.y_centry;   // 让实际值y等于y的中心坐标
-//			Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);  // 根据y的实际值求x
+//			if(Flag.dx != 0) { Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet); } // [BUGFIX] 竖边(dx==0)保持 x 常量, 避免 calculateX 返回 0 打飞光斑  // 根据y的实际值求x
 			
 			if(Flag.dy > 0) {
 				if(Flag.Is_10ms_YES == 1) {
@@ -297,7 +300,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
 						Flag.y_actual+=BIG_FRAME_STEP;
-						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
+						if(Flag.dx != 0) { Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet); } // [BUGFIX] 竖边(dx==0)保持 x 常量, 避免 calculateX 返回 0 打飞光斑
 						if(myabs(Flag.y_actual - RetangleY[1]) < 4) {
 							Flag.x_actual = RetangleX[1];
 							Flag.y_actual = RetangleY[1];
@@ -311,7 +314,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
 						Flag.y_actual-=BIG_FRAME_STEP;
-						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
+						if(Flag.dx != 0) { Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet); } // [BUGFIX] 竖边(dx==0)保持 x 常量, 避免 calculateX 返回 0 打飞光斑
 						if(myabs(Flag.y_actual - RetangleY[1]) < 4) {
 							Flag.x_actual = RetangleX[1];
 							Flag.y_actual = RetangleY[1];
@@ -359,7 +362,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
 						Flag.y_actual+=BIG_FRAME_STEP;
-						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
+						if(Flag.dx != 0) { Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet); } // [BUGFIX] 竖边(dx==0)保持 x 常量, 避免 calculateX 返回 0 打飞光斑
 						if(myabs(Flag.y_actual - RetangleY[2]) < 4) {
 							Flag.x_actual = RetangleX[2];
 							Flag.y_actual = RetangleY[2];
@@ -373,7 +376,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
 						Flag.y_actual-=BIG_FRAME_STEP;
-						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
+						if(Flag.dx != 0) { Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet); } // [BUGFIX] 竖边(dx==0)保持 x 常量, 避免 calculateX 返回 0 打飞光斑
 						if(myabs(Flag.y_actual - RetangleY[2]) < 4) {
 							Flag.x_actual = RetangleX[2];
 							Flag.y_actual = RetangleY[2];
@@ -420,7 +423,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
 						Flag.y_actual+=BIG_FRAME_STEP;
-						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
+						if(Flag.dx != 0) { Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet); } // [BUGFIX] 竖边(dx==0)保持 x 常量, 避免 calculateX 返回 0 打飞光斑
 						if(myabs(Flag.y_actual - RetangleY[3]) < 10) {
 							Flag.x_actual = RetangleX[3];
 							Flag.y_actual = RetangleY[3];
@@ -434,7 +437,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
 						Flag.y_actual-=BIG_FRAME_STEP;
-						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
+						if(Flag.dx != 0) { Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet); } // [BUGFIX] 竖边(dx==0)保持 x 常量, 避免 calculateX 返回 0 打飞光斑
 						if(myabs(Flag.y_actual - RetangleY[3]) < 10) {
 							Flag.x_actual = RetangleX[3];
 							Flag.y_actual = RetangleY[3];
@@ -487,7 +490,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
 						Flag.y_actual+=BIG_FRAME_STEP;
-						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
+						if(Flag.dx != 0) { Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet); } // [BUGFIX] 竖边(dx==0)保持 x 常量, 避免 calculateX 返回 0 打飞光斑
 						if(myabs(Flag.y_actual - RetangleY[0]) < 	10) {
 							Flag.x_actual = RetangleX[0];
 							Flag.y_actual = RetangleY[0];
@@ -505,7 +508,7 @@ void Motion_TarCtrl(int* RetangleX, int* RetangleY) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
 						Flag.y_actual-=BIG_FRAME_STEP;
-						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
+						if(Flag.dx != 0) { Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet); } // [BUGFIX] 竖边(dx==0)保持 x 常量, 避免 calculateX 返回 0 打飞光斑
 						if(myabs(Flag.y_actual - RetangleY[0]) < 10) {
 							Flag.x_actual = RetangleX[0];
 							Flag.y_actual = RetangleY[0];
@@ -725,7 +728,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 			break;
 		case Centry_Y_Start_State:   // 使用y当变量的状态
 //			Flag.y_actual = Flag.y_centry;   // 让实际值y等于y的中心坐标
-//			Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);  // 根据y的实际值求x
+//			if(Flag.dx != 0) { Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet); } // [BUGFIX] 竖边(dx==0)保持 x 常量, 避免 calculateX 返回 0 打飞光斑  // 根据y的实际值求x
 			
 			if(Flag.dy > 0) {
 				if(Flag.Is_10ms_YES == 1) {
@@ -794,7 +797,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
 						Flag.y_actual+=BLACK_FRAME_STEP;
-						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
+						if(Flag.dx != 0) { Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet); } // [BUGFIX] 竖边(dx==0)保持 x 常量, 避免 calculateX 返回 0 打飞光斑
 						if(myabs(Flag.y_actual - Black_Retany[1]) < 2) {
 							Flag.x_actual = Black_Retanx[1];
 							Flag.y_actual = Black_Retany[1];
@@ -808,7 +811,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
 						Flag.y_actual-=BLACK_FRAME_STEP;
-						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
+						if(Flag.dx != 0) { Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet); } // [BUGFIX] 竖边(dx==0)保持 x 常量, 避免 calculateX 返回 0 打飞光斑
 						if(myabs(Flag.y_actual - Black_Retany[1]) < 2) {
 							Flag.x_actual = Black_Retanx[1];
 							Flag.y_actual = Black_Retany[1];
@@ -856,7 +859,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
 						Flag.y_actual+=BLACK_FRAME_STEP;
-						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
+						if(Flag.dx != 0) { Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet); } // [BUGFIX] 竖边(dx==0)保持 x 常量, 避免 calculateX 返回 0 打飞光斑
 						if(myabs(Flag.y_actual - Black_Retany[2]) < 2) {
 							Flag.x_actual = Black_Retanx[2];
 							Flag.y_actual = Black_Retany[2];
@@ -870,7 +873,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
 						Flag.y_actual-=BLACK_FRAME_STEP;
-						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
+						if(Flag.dx != 0) { Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet); } // [BUGFIX] 竖边(dx==0)保持 x 常量, 避免 calculateX 返回 0 打飞光斑
 						if(myabs(Flag.y_actual - Black_Retany[2]) < 2) {
 							Flag.x_actual = Black_Retanx[2];
 							Flag.y_actual = Black_Retany[2];
@@ -917,7 +920,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
 						Flag.y_actual+=BLACK_FRAME_STEP;
-						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
+						if(Flag.dx != 0) { Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet); } // [BUGFIX] 竖边(dx==0)保持 x 常量, 避免 calculateX 返回 0 打飞光斑
 						if(myabs(Flag.y_actual - Black_Retany[3]) < 2) {
 							Flag.x_actual = Black_Retanx[3];
 							Flag.y_actual = Black_Retany[3];
@@ -931,7 +934,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
 						Flag.y_actual-=BLACK_FRAME_STEP;
-						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
+						if(Flag.dx != 0) { Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet); } // [BUGFIX] 竖边(dx==0)保持 x 常量, 避免 calculateX 返回 0 打飞光斑
 						if(myabs(Flag.y_actual - Black_Retany[3]) < 2) {
 							Flag.x_actual = Black_Retanx[3];
 							Flag.y_actual = Black_Retany[3];
@@ -984,7 +987,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
 						Flag.y_actual+=BLACK_FRAME_STEP;
-						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
+						if(Flag.dx != 0) { Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet); } // [BUGFIX] 竖边(dx==0)保持 x 常量, 避免 calculateX 返回 0 打飞光斑
 						if(myabs(Flag.y_actual - Black_Retany[0]) < 	2) {
 							Flag.x_actual = Black_Retanx[0];
 							Flag.y_actual = Black_Retany[0];
@@ -1002,7 +1005,7 @@ void Motion_TarCtrl_Black(int* Black_Retanx, int* Black_Retany) {
 					if(Flag.Is_10ms_YES == 1) {
 						Flag.Is_10ms_YES = 0;
 						Flag.y_actual-=BLACK_FRAME_STEP;
-						Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet);
+						if(Flag.dx != 0) { Flag.x_actual = calculateX(Flag.y_actual, Flag.Slope, Flag.Intercpet); } // [BUGFIX] 竖边(dx==0)保持 x 常量, 避免 calculateX 返回 0 打飞光斑
 						if(myabs(Flag.y_actual - Black_Retany[0]) < 2) {
 							Flag.x_actual = Black_Retanx[0];
 							Flag.y_actual = Black_Retany[0];
